@@ -1,0 +1,24 @@
+@import '@fontsource/plus-jakarta-sans/400.css';
+@import '@fontsource/plus-jakarta-sans/500.css';
+@import '@fontsource/plus-jakarta-sans/600.css';
+@import '@fontsource/plus-jakarta-sans/700.css';
+@import '@fontsource/noto-sans-tamil/400.css';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { font-family: theme('fontFamily.sans'); }
+  :focus-visible { outline: 2px solid theme('colors.brand.500'); outline-offset: 2px; }
+}
+
+@layer components {
+  .card { @apply rounded-xl border border-ink-200 bg-white shadow-card; }
+  .field-label { @apply mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-500; }
+  .field-input {
+    @apply block w-full rounded-lg border border-ink-300 bg-white px-3 py-2 text-sm text-ink-900
+           placeholder:text-ink-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100
+           disabled:bg-ink-50 disabled:text-ink-500;
+  }
+  .field-error { @apply mt-1 text-xs text-danger-600; }
+}

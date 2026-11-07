@@ -1,0 +1,16 @@
+{
+  "name": "tnsc-ardb-hrms",
+  "private": true,
+  "version": "0.1.0",
+  "description": "TNSC ARDB HR & Payroll (ported from TNCU_GAMS) with EPF Trust extension points",
+  "workspaces": ["backend", "frontend"],
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "dev": "npm run dev -w backend & npm run dev -w frontend; wait",
+    "build": "npm run build -w backend && npm run build -w frontend",
+    "test": "npm test -w backend",
+    "typecheck": "npm run typecheck -w backend && npm run typecheck -w frontend",
+    "db:migrate": "npm run db:migrate -w backend",
+    "db:seed": "npm run db:seed -w backend"
+  }
+}
