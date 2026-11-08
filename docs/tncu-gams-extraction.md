@@ -23,6 +23,7 @@ difference is called out as **ARDB decision**.
 | D9 | **Hard-coded rule values move into `core.app_settings`:** increment cycle, PF rate defaults, leave-credit constants, caps and similar. |
 | D10 | **Loans and sundry-debtor recovery are out of scope**, because they depend on TNCU's Loans and Accounts modules. Component type 3 (LoanDeductions) is kept, and amounts come from the monthly period-deduction upload. |
 | D12 | **No Party (KYC) Master** (decided 2026-11-06, migration 0002). The KYC and bank fields (name, Tamil name, gender, contact, address, PAN, Aadhaar, bank, bank branch, account no., IFSC) live on `hr.employees`. The employee code is generated per employee as `hr.employee_code_prefix` followed by a number zero-padded to `hr.employee_code_pad` digits (EMP001). Auto-creating a self-service login on create is deferred to the My Payslips step. |
+| D13 | **HRA/CCA calculation basis is configurable** (decided 2026-11-07, migration 0003, [spec 01](../specs/01-hra-cca-rates-calculation-basis.md)). Setting `payroll.hra_cca.basis` chooses PLACE (TNCU: branch's place category) or DESIGNATION (TNSC ARDB). One basis drives both HRA and CCA. Rates of the inactive basis are kept read-only. |
 | D11 | **Paying without accounts:** an APPROVED bill becomes PAID through "Mark Paid" (in bulk or per bill), and an NEFT file is exported. Lock & Roll still requires every approved, non-withheld bill to be PAID. |
 
 ---
@@ -191,7 +192,7 @@ Append-only. Columns: effective_date, branch, designation, basic_pay, and servic
 - **component_assignments:** employee, component, assigned_type (FIXED or PERCENTAGE), amount, percentage, min, max, effective_from, effective_to, is_active. Overlapping active assignments are rejected.
 - **Rate tables:**
   - **DA and PF rates:** effective-dated. Adding a rate deactivates the previous one and sets its effective_to to the new start − 1 day.
-  - **HRA/CCA:** one row per place: hra%, min and max, cca%, min and max.
+  - **HRA/CCA:** one row per place: hra%, min and max, cca%, min and max. **ARDB (D13):** alternatively one row per designation, following the `payroll.hra_cca.basis` setting.
 - **settings:** min_net_percent_of_gross (25) and gratuity_ceiling (2,000,000).
 
 ### 3.2 Period workflow

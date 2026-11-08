@@ -304,6 +304,26 @@ export interface EmployeeRetirementTable {
   is_active: Generated<boolean>;
 }
 
+/** Only the columns the HRA/CCA resolver reads (posting / designation as on a date). */
+export interface EmployeeTransferTable {
+  id: Generated<number>;
+  employee_id: number;
+  from_branch_id: number;
+  to_branch_id: number;
+  joining_date: DateStr | null;
+  is_active: Generated<boolean>;
+}
+
+export interface EmployeePromotionTable {
+  id: Generated<number>;
+  employee_id: number;
+  promotion_date: DateStr;
+  effect_date: DateStr | null;
+  status: string;
+  from_designation_id: number;
+  to_designation_id: number;
+}
+
 export interface PayrollDaRateTable {
   id: Generated<number>;
   effective_from: DateStr;
@@ -326,6 +346,29 @@ export interface PayrollPfDeductionRateTable {
   created_at: Generated<Timestamp>;
   approved_by: string | null;
   approved_at: Timestamp | null;
+}
+
+export type HraCcaBasis = 'PLACE' | 'DESIGNATION';
+
+export interface PayrollHraCcaRateTable {
+  id: Generated<number>;
+  rate_basis: Generated<HraCcaBasis>;
+  place_id: number | null;
+  designation_id: number | null;
+  effective_from: DateStr;
+  effective_to: DateStr | null;
+  hra_percentage: Numeric;
+  hra_minimum_amount: Numeric;
+  hra_maximum_amount: Numeric;
+  cca_percentage: Numeric;
+  cca_minimum_amount: Numeric;
+  cca_maximum_amount: Numeric;
+  remarks: string | null;
+  is_active: Generated<boolean>;
+  created_by: string;
+  created_at: Generated<Timestamp>;
+  updated_by: string | null;
+  updated_at: Timestamp | null;
 }
 
 export interface PayrollPeriodTable {
@@ -400,10 +443,13 @@ export interface Database {
   'hr.employees': EmployeeTable;
   'hr.employee_service_histories': EmployeeServiceHistoryTable;
   'hr.employee_retirements': EmployeeRetirementTable;
+  'hr.employee_transfers': EmployeeTransferTable;
+  'hr.employee_promotions': EmployeePromotionTable;
   'payroll.payroll_components': PayrollComponentTable;
   'payroll.payroll_periods': PayrollPeriodTable;
   'payroll.payroll_da_rates': PayrollDaRateTable;
   'payroll.payroll_pf_deduction_rates': PayrollPfDeductionRateTable;
+  'payroll.payroll_hra_cca_rates': PayrollHraCcaRateTable;
   'payroll.payrolls': PayrollTable;
 }
 

@@ -247,3 +247,66 @@ export interface PayrollPeriod {
   locked_by: string | null;
   locked_at: string | null;
 }
+
+// ---------------------------------------------------------------- HRA & CCA rates (specs/01)
+export type HraCcaBasis = 'PLACE' | 'DESIGNATION';
+export type HraCcaStatus = 'CURRENT' | 'FUTURE' | 'EXPIRED' | 'INACTIVE';
+
+export interface HraCcaRate {
+  id: number;
+  rate_basis: HraCcaBasis;
+  place_id: number | null;
+  designation_id: number | null;
+  key_name: string;
+  effective_from: string;
+  effective_to: string | null;
+  hra_percentage: string;
+  hra_minimum_amount: string;
+  hra_maximum_amount: string;
+  cca_percentage: string;
+  cca_minimum_amount: string;
+  cca_maximum_amount: string;
+  remarks: string | null;
+  is_active: boolean;
+  created_by: string;
+  created_at: string;
+  updated_by: string | null;
+  updated_at: string | null;
+  status: HraCcaStatus;
+}
+
+export interface HraCcaRateDetail extends HraCcaRate {
+  usedInFinalisedPayroll: boolean;
+  readOnly: boolean;
+  warnings?: string[];
+}
+
+export interface HraCcaRateList {
+  basis: HraCcaBasis;
+  activeBasis: HraCcaBasis;
+  readOnly: boolean;
+  asOn: string;
+  page: number;
+  size: number;
+  total: number;
+  items: HraCcaRate[];
+}
+
+export interface HraCcaBasisStatus {
+  basis: HraCcaBasis;
+  basisFrom: string | null;
+  todayBasis: HraCcaBasis;
+  effectiveFrom: string;
+  canChange: boolean;
+  blockedReason: string | null;
+  rateCounts: Record<HraCcaBasis, number>;
+  lastChangedBy: string | null;
+  lastChangedAt: string | null;
+}
+
+export interface HraCcaCoverage {
+  basis: HraCcaBasis;
+  asOn: string;
+  keysWithEmployees: number;
+  missing: Array<{ keyId: number | null; keyName: string; employeeCount: number }>;
+}

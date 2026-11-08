@@ -68,6 +68,43 @@ export interface TransferPosting {
   joining: string; // 'YYYY-MM-DD'
 }
 
+/** A dated change of key (branch, designation, …): `from` → `to` with effect from `on`. */
+export interface KeyChange<K> {
+  from: K;
+  to: K;
+  on: string; // 'YYYY-MM-DD'
+}
+
+/**
+ * Split [mStart, mEnd] into (key, days) segments from dated changes (ordered by `on` asc).
+ * Segment days always sum to the days in the month. Generic form of TNCU BranchDaySegments: with no
+ * changes the fallback key covers the month; otherwise the opening key is the `to` of the last change
+ * on or before the month start, else the `from` of the first change.
+ */
+export function keyDaySegments<K>(changes: KeyChange<K>[] | null | undefined, fallback: K, mStart: string, mEnd: string): Array<{ key: K; days: number }> {
+  const s = dayNumber(mStart);
+  const e = dayNumber(mEnd);
+  const totalDays = e - s + 1;
+  if (!changes || changes.length === 0) return [{ key: fallback, days: totalDays }];
+
+  let opening = changes[0]!.from;
+  for (const c of changes) if (dayNumber(c.on) <= s) opening = c.to;
+
+  const segs: Array<{ key: K; days: number }> = [];
+  let cur = opening;
+  let segStart = s;
+  for (const c of changes) {
+    const j = dayNumber(c.on);
+    if (j <= s || j > e) continue;
+    const days = j - segStart;
+    if (days > 0) segs.push({ key: cur, days });
+    cur = c.to;
+    segStart = j;
+  }
+  segs.push({ key: cur, days: e - segStart + 1 });
+  return segs;
+}
+
 /**
  * Split [mStart, mEnd] into (branch, days) segments from joining-dated transfers (ordered by joining asc).
  * Segment days always sum to the days in the month.
@@ -78,34 +115,8 @@ export function branchDaySegments(
   mStart: string,
   mEnd: string,
 ): Array<{ branchId: number; days: number }> {
-  const s = dayNumber(mStart);
-  const e = dayNumber(mEnd);
-  const totalDays = e - s + 1;
-  if (!transfers || transfers.length === 0) return [{ branchId: fallbackBranchId, days: totalDays }];
-
-  let opening = fallbackBranchId;
-  let haveOpening = false;
-  for (const t of transfers) {
-    if (dayNumber(t.joining) <= s) {
-      opening = t.toBranchId;
-      haveOpening = true;
-    }
-  }
-  if (!haveOpening) opening = transfers[0]!.fromBranchId;
-
-  const segs: Array<{ branchId: number; days: number }> = [];
-  let cur = opening;
-  let segStart = s;
-  for (const t of transfers) {
-    const j = dayNumber(t.joining);
-    if (j <= s || j > e) continue;
-    const days = j - segStart;
-    if (days > 0) segs.push({ branchId: cur, days });
-    cur = t.toBranchId;
-    segStart = j;
-  }
-  segs.push({ branchId: cur, days: e - segStart + 1 });
-  return segs;
+  const changes = (transfers ?? []).map((t) => ({ from: t.fromBranchId, to: t.toBranchId, on: t.joining }));
+  return keyDaySegments(changes, fallbackBranchId, mStart, mEnd).map((g) => ({ branchId: g.key, days: g.days }));
 }
 
 /** Drop paise, then raise to the next multiple of `step` (TNCU CeilTo10 with step = 10). */

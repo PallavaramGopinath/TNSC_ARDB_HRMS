@@ -7,6 +7,19 @@ import { PeriodInputSchema, PeriodQuerySchema, WorkingDaysSchema } from '../mode
 import { validate } from '../middleware/validate';
 import { DaRateInputSchema } from '../models/payroll/daRate.schema';
 import * as pfRates from '../controllers/payroll/pfRateController';
+import * as hraCca from '../controllers/payroll/hraCcaController';
+import {
+  AffectedQuerySchema,
+  AsOnQuerySchema,
+  BasisChangeSchema,
+  CoverageQuerySchema,
+  HraCcaBulkReviseSchema,
+  HraCcaRateCreateSchema,
+  HraCcaRateQuerySchema,
+  HraCcaRateReviseSchema,
+  HraCcaRateUpdateSchema,
+  ResolveQuerySchema,
+} from '../models/payroll/hraCca.schema';
 import { PfRateInputSchema } from '../models/payroll/pfRate.schema';
 import { asyncHandler as h } from '../lib/asyncHandler';
 import { requireRole } from '../middleware/authorize';
@@ -17,6 +30,8 @@ import { Roles } from '../models/auth';
  */
 const read = requireRole(Roles.HR, Roles.Payroll);
 const write = requireRole(Roles.Payroll);
+/** Organisation settings (spec ORG_SETTINGS_EDIT): Admin only. */
+const adminOnly = requireRole();
 
 export function buildPayrollRouter(): Router {
   const r = Router();
@@ -41,7 +56,24 @@ export function buildPayrollRouter(): Router {
   r.get('/rates/pf/active', read, h(pfRates.active));
   r.post('/rates/pf', write, validate(PfRateInputSchema), h(pfRates.create));
 
-  // Next steps (docs §3): components CRUD, component-assignments, rates/hra-cca, settings,
+  // HRA & CCA calculation basis — specs/01 §6 (read HR/Payroll, change Admin only)
+  r.get('/settings/hra-cca-basis', read, h(hraCca.basisStatus));
+  r.put('/settings/hra-cca-basis', adminOnly, validate(BasisChangeSchema), h(hraCca.basisChange));
+  r.get('/settings/hra-cca-basis/coverage', read, validate(CoverageQuerySchema, 'query'), h(hraCca.basisCoverage));
+
+  // HRA & CCA rates — read HR/Payroll, write Payroll (Admin always). Static paths before /:id.
+  r.get('/rates/hra-cca', read, validate(HraCcaRateQuerySchema, 'query'), h(hraCca.list));
+  r.get('/rates/hra-cca/missing', read, validate(AsOnQuerySchema, 'query'), h(hraCca.missing));
+  r.get('/rates/hra-cca/affected', read, validate(AffectedQuerySchema, 'query'), h(hraCca.affected));
+  r.get('/rates/hra-cca/resolve', read, validate(ResolveQuerySchema, 'query'), h(hraCca.resolve));
+  r.post('/rates/hra-cca', write, validate(HraCcaRateCreateSchema), h(hraCca.create));
+  r.post('/rates/hra-cca/bulk-revise', write, validate(HraCcaBulkReviseSchema), h(hraCca.bulkRevise));
+  r.get('/rates/hra-cca/:id', read, validate(IdParamSchema, 'params'), h(hraCca.get));
+  r.put('/rates/hra-cca/:id', write, validate(IdParamSchema, 'params'), validate(HraCcaRateUpdateSchema), h(hraCca.update));
+  r.post('/rates/hra-cca/:id/revise', write, validate(IdParamSchema, 'params'), validate(HraCcaRateReviseSchema), h(hraCca.revise));
+  r.delete('/rates/hra-cca/:id', write, validate(IdParamSchema, 'params'), h(hraCca.deactivate));
+
+  // Next steps (docs §3): components CRUD, component-assignments, settings,
   // payrolls (compute, preparation, withhold,
   // approve-run, mark-paid), period-attendance, period-deductions, manual-deductions, readiness,
   // reports, payslips, my-payslips, da-arrears, sls, retirement-leave-encashment, neft.

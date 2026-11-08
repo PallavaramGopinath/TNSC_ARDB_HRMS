@@ -57,7 +57,8 @@ INSERT INTO core.app_settings (module, key, value, description, created_by) VALU
   ('payroll', 'payroll.gratuity.min_years',        '5',               'Qualifying service (waived for DEATH/MEDICAL)', 'seed'),
   ('payroll', 'payroll.encashment.max_days',       '240',             'Retirement leave encashment cap', 'seed'),
   ('payroll', 'payroll.sls.allowed_days',          '[15,30]',         'Surrender leave salary day options', 'seed'),
-  ('payroll', 'payroll.neft.sender_name',          '"TNSC ARDB"',     'NEFT file sender name', 'seed')
+  ('payroll', 'payroll.neft.sender_name',          '"TNSC ARDB"',     'NEFT file sender name', 'seed'),
+  ('payroll', 'payroll.hra_cca.basis',             '"PLACE"',         'HRA/CCA rate looked up by PLACE (branch place category) or DESIGNATION; change via Rule Settings', 'seed')
 ON CONFLICT (key, effective_from) DO NOTHING;
 
 -- -----------------------------------------------------------------------------
