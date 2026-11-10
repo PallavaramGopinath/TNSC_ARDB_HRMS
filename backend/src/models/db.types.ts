@@ -425,6 +425,21 @@ export interface PayrollComponentTable {
   checked_at: Timestamp | null;
 }
 
+/** hr.employee_attendances — daily attendance, UNIQUE(employee_id, attendance_date). */
+export interface EmployeeAttendanceTable {
+  id: Generated<number>;
+  employee_id: number;
+  attendance_date: DateStr;
+  in_time: string | null;
+  out_time: string | null;
+  attendance_status: string;
+  remarks: string | null;
+  branch_id: number;
+  financial_year_id: number | null;
+  created_by: string;
+  created_at: Generated<Timestamp>;
+}
+
 export interface Database {
   'core.place_categories': PlaceCategoryTable;
   'core.branches': BranchTable;
@@ -445,6 +460,7 @@ export interface Database {
   'hr.employee_retirements': EmployeeRetirementTable;
   'hr.employee_transfers': EmployeeTransferTable;
   'hr.employee_promotions': EmployeePromotionTable;
+  'hr.employee_attendances': EmployeeAttendanceTable;
   'payroll.payroll_components': PayrollComponentTable;
   'payroll.payroll_periods': PayrollPeriodTable;
   'payroll.payroll_da_rates': PayrollDaRateTable;

@@ -310,3 +310,38 @@ export interface HraCcaCoverage {
   keysWithEmployees: number;
   missing: Array<{ keyId: number | null; keyName: string; employeeCount: number }>;
 }
+
+// ---------------------------------------------------------------- HR › Attendance
+export type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'LEAVE' | 'HOLIDAY' | 'HALF_DAY';
+
+export interface AttendanceDay { date: string; day: number; weekday: number; locked: boolean }
+
+export interface AttendanceEmployee {
+  id: number;
+  employee_code: string;
+  employee_name: string;
+  designation_name: string;
+  date_of_joining: string | null;
+  date_of_leaving: string | null;
+  branch_id: number;
+}
+
+export interface AttendanceMonth {
+  branch: { id: number; code: string; name: string };
+  year: number;
+  month: number;
+  today: string;
+  days: AttendanceDay[];
+  lockedReason: string | null;
+  employees: AttendanceEmployee[];
+  records: Record<number, Record<string, { status: AttendanceStatus; remarks: string | null; branchId: number }>>;
+}
+
+export interface AttendanceImportRow { line: number; code: string; date: string; status: string }
+
+export interface AttendanceImportResult {
+  total: number;
+  valid: number;
+  imported: number;
+  errors: Array<{ line: number; code: string; date: string; message: string }>;
+}

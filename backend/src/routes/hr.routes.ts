@@ -4,6 +4,8 @@ import * as banks from '../controllers/hr/bankMasterController';
 import * as employees from '../controllers/hr/employeeController';
 import * as leaveTypes from '../controllers/hr/leaveTypeController';
 import * as branches from '../controllers/hr/branchController';
+import * as attendances from '../controllers/hr/attendanceController';
+import { AttendanceImportSchema, AttendanceMonthQuerySchema, AttendanceSaveSchema } from '../models/hr/attendance.schema';
 import { BranchInputSchema, BranchQuerySchema } from '../models/hr/branch.schema';
 import { LeaveTypeInputSchema, LeaveTypeQuerySchema } from '../models/hr/leaveType.schema';
 import { BankInputSchema, BankQuerySchema, SetActiveQuerySchema } from '../models/hr/bankMaster.schema';
@@ -61,8 +63,13 @@ export function buildHrRouter(): Router {
   r.delete('/branches/:id/permanent', hrMasters, validate(IdParamSchema, 'params'), h(branches.remove));
   r.delete('/branches/:id', hrMasters, validate(IdParamSchema, 'params'), validate(SetActiveQuerySchema, 'query'), h(branches.setActive));
 
+  // Daily attendance — read HR/Payroll, write HR (monthly grid + CSV import)
+  r.get('/attendances', hrRead, validate(AttendanceMonthQuerySchema, 'query'), h(attendances.month));
+  r.put('/attendances', hrMasters, validate(AttendanceSaveSchema), h(attendances.save));
+  r.post('/attendances/import', hrMasters, validate(AttendanceImportSchema), h(attendances.importRows));
+
   // Next steps (see docs/tncu-gams-extraction.md §2):
-  // attendances, leave-*, increments, transfers, promotions,
+  // leave-*, increments, transfers, promotions,
   // promotion-panels, retirements, disciplinary-*, suspensions, penalty-orders, reports/*.
   return r;
 }
