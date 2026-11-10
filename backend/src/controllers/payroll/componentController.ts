@@ -1,10 +1,14 @@
 import type { Request, Response } from 'express';
-import { sql } from 'kysely';
-import { db } from '../../config/db';
+import * as svc from '../../services/payroll/componentService';
 
-/** Read-only baseline endpoint; full CRUD + maker-checker lands with the payroll masters step. */
-export const list = async (_req: Request, res: Response) => {
-  res.json(
-    await db.selectFrom('payroll.payroll_components').selectAll().orderBy(sql`display_order asc nulls last`).orderBy('component_code').execute(),
-  );
+const actor = (req: Request) => ({ user: req.user, ctx: req.ctx });
+const id = (req: Request) => Number(req.params.id);
+
+export const list = async (req: Request, res: Response) => { res.json(await svc.list(req.query as never)); };
+export const get = async (req: Request, res: Response) => { res.json(await svc.get(id(req))); };
+export const create = async (req: Request, res: Response) => { res.status(201).json(await svc.create(actor(req), req.body)); };
+export const update = async (req: Request, res: Response) => { res.json(await svc.update(actor(req), id(req), req.body)); };
+export const setActive = async (req: Request, res: Response) => {
+  res.json(await svc.setActive(actor(req), id(req), (req.query as unknown as { isActive: boolean }).isActive));
 };
+export const remove = async (req: Request, res: Response) => { await svc.deletePermanent(actor(req), id(req)); res.status(204).end(); };

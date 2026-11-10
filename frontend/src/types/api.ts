@@ -47,8 +47,17 @@ export interface PayrollComponent {
   component_type: 1 | 2 | 3;
   is_da_applicable: boolean;
   is_surrender_leave_applicable: boolean;
+  is_income_tax_applicable: boolean;
   display_order: number | null;
+  calculation_method: string | null;
+  calculation_basis: string | null;
+  minimum_amount: string;
+  maximum_amount: string;
   is_active: boolean;
+  /** Rows in assignments / payroll details / deductions that reference this component. */
+  usage_count: number;
+  /** Code the payroll calculator depends on — code and type locked, cannot be deactivated or deleted. */
+  is_system: boolean;
 }
 
 export interface Branch { id: number; code: string; name: string; type: 'HO' | 'BRANCH'; place_id: number | null; is_active: boolean }

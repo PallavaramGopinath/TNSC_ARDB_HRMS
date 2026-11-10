@@ -10,6 +10,21 @@ import type {
   PayrollPeriod,
 } from '@/types/api';
 
+export interface PayrollComponentInput {
+  componentName: string;
+  componentCode: string;
+  componentType: 1 | 2 | 3;
+  isDaApplicable: boolean;
+  isSurrenderLeaveApplicable: boolean;
+  isIncomeTaxApplicable: boolean;
+  displayOrder: number | string | null;
+  calculationMethod: string | null;
+  calculationBasis: string | null;
+  minimumAmount: number | string;
+  maximumAmount: number | string;
+  isActive?: boolean;
+}
+
 /** DA and PF share one API shape; the POST body names the percentage field per rate. */
 export interface RateApi {
   list: () => Promise<EffectiveRate[]>;
@@ -22,7 +37,14 @@ const rateApi = (path: 'da' | 'pf', field: 'daPercentage' | 'pfPercentage'): Rat
 });
 
 export const payrollApi = {
-  components: { list: () => api.get<PayrollComponent[]>('/payroll/components').then((r) => r.data) },
+  components: {
+    list: (params?: { includeInactive?: boolean }) => api.get<PayrollComponent[]>('/payroll/components', { params }).then((r) => r.data),
+    create: (body: PayrollComponentInput) => api.post<PayrollComponent>('/payroll/components', body).then((r) => r.data),
+    update: (id: number, body: PayrollComponentInput) => api.put<PayrollComponent>(`/payroll/components/${id}`, body).then((r) => r.data),
+    setActive: (id: number, isActive: boolean) =>
+      api.delete<PayrollComponent>(`/payroll/components/${id}`, { params: { isActive } }).then((r) => r.data),
+    remove: (id: number) => api.delete(`/payroll/components/${id}/permanent`),
+  },
   daRates: rateApi('da', 'daPercentage'),
   pfRates: rateApi('pf', 'pfPercentage'),
   hraCcaBasis: {
