@@ -31,3 +31,11 @@ export function downloadText(filename: string, content: string, type = 'text/csv
   a.click();
   URL.revokeObjectURL(url);
 }
+
+/** Quote a field when it contains a comma, quote, or line break (RFC 4180). */
+const csvField = (v: string) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+
+/** Rows → CSV text with CRLF line endings and a UTF-8 BOM, so Excel opens it with the right encoding. */
+export function toCsv(rows: string[][]): string {
+  return '﻿' + rows.map((r) => r.map(csvField).join(',')).join('\r\n') + '\r\n';
+}

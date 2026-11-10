@@ -15,7 +15,8 @@ TNCU records attendance daily: one row per employee per date, with status PRESEN
 ## Requirements
 - HR marks attendance for one branch and one month at a time, in a grid of employees × days.
 - Payroll users can view it but not change it.
-- HR can bulk-load attendance from the TNCU CSV format.
+- Anyone who can view the grid can download a **month sheet** for the branch and month: a CSV with one row per employee and one column per day, pre-filled with the saved marks. HR fills it in a spreadsheet and uploads it.
+- HR can also bulk-load attendance from the TNCU list format (`code,date,status`).
 - Rules, enforced on the server and mirrored in the grid:
   1. No marks before the employee's date of joining or after their date of leaving.
   2. No future dates, except HOLIDAY (so holidays can be planned ahead).
@@ -29,12 +30,13 @@ TNCU records attendance daily: one row per employee per date, with status PRESEN
 |---|---|---|---|---|
 | GET | `/api/hr/attendances` | Admin, HR, Payroll | `branchId, year, month` | `{ branch, year, month, today, days[], lockedReason, employees[], records }` |
 | PUT | `/api/hr/attendances` | Admin, HR | `{ branchId, entries: [{ employeeId, date, status \| null, remarks? }] }` (≤ 3,000) | `{ saved, cleared }` |
-| POST | `/api/hr/attendances/import` | Admin, HR | `{ rows: [{ line, code, date, status }], dryRun }` (≤ 5,000) | `{ total, valid, imported, errors: [{ line, code, date, message }] }` |
+| POST | `/api/hr/attendances/import` | Admin, HR | `{ rows: [{ line, code, date, status }], dryRun }` (≤ 5,000) | `{ total, valid, unchanged, imported, errors: [{ line, code, date, message }] }` |
 
 - **Employees in the grid:** those posted to the branch who served during the month, plus anyone with marks in that branch for the month (for example, employees transferred out mid-month).
 - **Statuses:** P / A / L / H / HD and the full names are accepted, in any case.
 - **Import dates:** YYYY-MM-DD, DD-MM-YYYY, DD/MM/YYYY or DD.MM.YYYY.
 - **Saving:** writes upsert on `(employee_id, attendance_date)` and set `financial_year_id` from the financial year that covers the date. A `null` status deletes the row.
+- **Unchanged marks:** import rows whose status equals the saved one are skipped and counted as `unchanged`. They are not checked against payroll locks, so re-uploading a pre-filled sheet that covers a locked month does not fail on cells nobody touched.
 - **Branch:** imported rows use the employee's current branch for `branch_id` and for the lock check.
 - **Errors:** an invalid save returns 400 `ATTENDANCE_INVALID` with `details.errors[{ employeeId, date, message }]`, so the grid can outline the failing cells.
 - **Code:**
@@ -53,10 +55,15 @@ TNCU records attendance daily: one row per employee per date, with status PRESEN
   - Sundays are shaded, days outside service are hatched, and locked days show a lock.
   - Edited cells are outlined, and cells the server rejects are outlined in red with the reason as a tooltip.
   - Per-employee totals and an "Unmarked" count on the right; a present count per day at the bottom.
-- **Import:** `components/hr/AttendanceImport.tsx`.
-  - The CSV is parsed in the browser (`lib/csv.ts`) and checked on the server with a dry run, which lists errors by line.
-  - "Import" is enabled only when every row is valid.
-  - A template can be downloaded.
+- **Month sheet:** `components/hr/attendanceSheet.ts` builds and reads it.
+  - Layout: `Code,Name,Designation,01 Sun,02 Mon,…`. Day headers are text ("DD Ddd"), so spreadsheets don't turn them into dates; "5 Thu" still reads as day 5.
+  - Cells hold P / A / L / HD / H. `-` marks days outside service. Blank and `-` cells are ignored on upload (left unchanged).
+  - The download includes unsaved edits on screen. The file is named `attendance-<branch code>-<YYYY-MM>.csv` and has a UTF-8 BOM so Excel reads it correctly.
+  - On upload, day columns are dated using the month on screen. A day column outside that month (for example, a 31-day sheet uploaded on a 30-day month) is rejected.
+- **Upload:** `components/hr/AttendanceImport.tsx`.
+  - The month sheet or the `code,date,status` list is detected from the header row and flattened to rows in the browser (`lib/csv.ts`).
+  - A server dry run lists errors by spreadsheet row and reports how many marks are new or changed and how many are already saved.
+  - "Import" is enabled only when every mark is valid and at least one is new or changed.
 
 ### Database
 No change. Edits are audited by the generic `trg_audit` trigger.
@@ -67,6 +74,7 @@ No change. Edits are audited by the generic `trg_audit` trigger.
 - [x] Days inside an approved or locked salary period are read-only in the grid and rejected by the API.
 - [x] Payroll users see the grid without the brush, Save or Import controls; the API rejects their writes (403).
 - [x] A CSV with any invalid row imports nothing and lists each problem with its line number.
+- [x] The downloaded month sheet, filled in and uploaded unchanged apart from the new marks, imports only the new marks.
 - [x] Unit tests: `tests/attendanceRules.test.ts`, `tests/attendance.schema.test.ts`.
 
 ## Open questions

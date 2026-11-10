@@ -343,5 +343,7 @@ export interface AttendanceImportResult {
   total: number;
   valid: number;
   imported: number;
+  /** Marks equal to what is already saved — skipped. */
+  unchanged: number;
   errors: Array<{ line: number; code: string; date: string; message: string }>;
 }

@@ -1,13 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { CalendarCheck, ChevronLeft, ChevronRight, Eraser, FileUp, Lock, Save, Undo2 } from 'lucide-react';
+import { CalendarCheck, ChevronLeft, ChevronRight, Eraser, FileDown, FileUp, Lock, Save, Undo2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AttendanceGrid, type Cell } from '@/components/hr/AttendanceGrid';
 import { AttendanceImport } from '@/components/hr/AttendanceImport';
 import { blockReason, cellKey, isSunday, STATUS, STATUS_ORDER, type Brush } from '@/components/hr/attendance';
+import { buildSheet } from '@/components/hr/attendanceSheet';
 import { Button } from '@/components/ui/Button';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { useAuth } from '@/hooks/useAuth';
+import { downloadText, toCsv } from '@/lib/csv';
 import { MONTHS } from '@/lib/format';
 import { errorMessage } from '@/services/api';
 import { hrApi, type AttendanceEntry } from '@/services/hr';
@@ -151,6 +153,13 @@ export function AttendancePage() {
       return m < 1 ? { year: year - 1, month: 12 } : m > 12 ? { year: year + 1, month: 1 } : { year, month: m };
     }));
 
+  /** Pre-filled month sheet (includes unsaved edits, so what you see is what you get). */
+  const downloadSheet = () => {
+    if (!data) return;
+    const ym = `${data.year}-${String(data.month).padStart(2, '0')}`;
+    downloadText(`attendance-${data.branch.code}-${ym}.csv`, toCsv(buildSheet(data.days, data.employees, statusOf)));
+  };
+
   const summary = useMemo(() => {
     if (!data) return null;
     let marked = 0;
@@ -164,15 +173,25 @@ export function AttendancePage() {
         title="Attendance"
         subtitle="Daily attendance by branch and month · click or drag to mark days, click a date to mark the whole column"
         actions={
-          canEdit && (
-            <>
-              <Button variant="secondary" onClick={() => setImporting(true)}><FileUp size={16} /> Import CSV</Button>
-              <Button variant="secondary" disabled={!dirty || save.isPending} onClick={() => guard(() => undefined)}><Undo2 size={16} /> Discard</Button>
-              <Button disabled={!dirty || save.isPending} onClick={() => save.mutate()}>
-                <Save size={16} /> {save.isPending ? 'Saving…' : `Save changes${dirty ? ` (${edits.size})` : ''}`}
-              </Button>
-            </>
-          )
+          <>
+            <Button
+              variant="secondary"
+              disabled={!data || data.employees.length === 0}
+              title="One row per employee, one column per day, with saved marks filled in"
+              onClick={downloadSheet}
+            >
+              <FileDown size={16} /> Download sheet
+            </Button>
+            {canEdit && (
+              <>
+                <Button variant="secondary" disabled={!data} onClick={() => setImporting(true)}><FileUp size={16} /> Upload sheet</Button>
+                <Button variant="secondary" disabled={!dirty || save.isPending} onClick={() => guard(() => undefined)}><Undo2 size={16} /> Discard</Button>
+                <Button disabled={!dirty || save.isPending} onClick={() => save.mutate()}>
+                  <Save size={16} /> {save.isPending ? 'Saving…' : `Save changes${dirty ? ` (${edits.size})` : ''}`}
+                </Button>
+              </>
+            )}
+          </>
         }
       />
 
@@ -304,8 +323,12 @@ export function AttendancePage() {
         />
       ) : null}
 
-      {importing && (
+      {importing && data && (
         <AttendanceImport
+          year={data.year}
+          month={data.month}
+          branchName={data.branch.name}
+          onDownloadSheet={downloadSheet}
           onClose={() => setImporting(false)}
           onImported={(n) => {
             setImporting(false);

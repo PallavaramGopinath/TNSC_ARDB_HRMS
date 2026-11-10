@@ -201,8 +201,11 @@ export async function save(actor: Actor, input: AttendanceSaveInput) {
 }
 
 /**
- * CSV import (TNCU columns code,date,status). Every row is checked; with dryRun=false and no
- * errors, all rows are upserted in one transaction against each employee's current branch.
+ * CSV import (TNCU columns code,date,status; the month sheet is flattened to these rows in the
+ * browser). Marks equal to what is already saved are skipped as `unchanged` — so a re-uploaded,
+ * pre-filled sheet does not trip over locked months. Every other row is checked; with
+ * dryRun=false and no errors, they are upserted in one transaction against each employee's
+ * current branch.
  */
 export async function importRows(actor: Actor, input: AttendanceImportInput) {
   const codes = [...new Set(input.rows.map((r) => r.code.toUpperCase()).filter(Boolean))];
@@ -219,8 +222,21 @@ export async function importRows(actor: Actor, input: AttendanceImportInput) {
   const isoDates = parsed.map((p) => p.iso).filter((d): d is string => !!d).sort();
   const locks = isoDates.length ? await lockedRanges(db, [...new Set(emps.map((e) => e.branch_id))], isoDates[0]!, isoDates[isoDates.length - 1]!) : new Map<number, LockedRange[]>();
   const today = businessDate();
+  const empIds = [...new Set(parsed.flatMap((p) => (p.emp ? [p.emp.id] : [])))];
+  const existing = new Map<string, string>();
+  if (empIds.length && isoDates.length) {
+    const marks = await db
+      .selectFrom('hr.employee_attendances')
+      .select(['employee_id', 'attendance_date', 'attendance_status'])
+      .where('employee_id', 'in', empIds)
+      .where('attendance_date', '>=', isoDates[0]!)
+      .where('attendance_date', '<=', isoDates[isoDates.length - 1]!)
+      .execute();
+    for (const m of marks) existing.set(`${m.employee_id}|${m.attendance_date}`, m.attendance_status);
+  }
 
   const errors: Array<{ line: number; code: string; date: string; message: string }> = [];
+  let unchanged = 0;
   const seen = new Map<string, number>();
   const valid: UpsertRow[] = [];
   for (const p of parsed) {
@@ -231,14 +247,15 @@ export async function importRows(actor: Actor, input: AttendanceImportInput) {
     if (!p.st) { fail(`Status "${p.status}" is not valid (use P, A, L, H or HD)`); continue; }
     const key = `${p.emp.id}|${p.iso}`;
     const dup = seen.get(key);
-    if (dup) { fail(`Duplicate of line ${dup}`); continue; }
+    if (dup) { fail(`Same employee and date as row ${dup}`); continue; }
     seen.set(key, p.line);
+    if (existing.get(key) === p.st) { unchanged++; continue; }
     const msg = checkEntry(p.emp, p.iso, p.st, today, locks.get(p.emp.branch_id) ?? []);
     if (msg) { fail(msg); continue; }
     valid.push({ employeeId: p.emp.id, date: p.iso, status: p.st, remarks: null, branchId: p.emp.branch_id });
   }
 
-  const result = { total: input.rows.length, valid: valid.length, errors, imported: 0 };
+  const result = { total: input.rows.length, valid: valid.length, unchanged, errors, imported: 0 };
   if (input.dryRun || errors.length) return result;
   await withAudit(actor, (trx) => upsert(trx, actor, valid));
   return { ...result, imported: valid.length };
