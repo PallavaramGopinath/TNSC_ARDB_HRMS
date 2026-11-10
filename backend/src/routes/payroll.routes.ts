@@ -21,6 +21,8 @@ import {
   ResolveQuerySchema,
 } from '../models/payroll/hraCca.schema';
 import { PfRateInputSchema } from '../models/payroll/pfRate.schema';
+import { ComponentInputSchema, ComponentQuerySchema } from '../models/payroll/component.schema';
+import { SetActiveQuerySchema } from '../models/hr/bankMaster.schema';
 import { asyncHandler as h } from '../lib/asyncHandler';
 import { requireRole } from '../middleware/authorize';
 import { Roles } from '../models/auth';
@@ -35,7 +37,13 @@ const adminOnly = requireRole();
 
 export function buildPayrollRouter(): Router {
   const r = Router();
-  r.get('/components', read, h(components.list));
+  // Payroll components (pay heads) — read HR/Payroll, write Payroll (Admin always)
+  r.get('/components', read, validate(ComponentQuerySchema, 'query'), h(components.list));
+  r.get('/components/:id', read, validate(IdParamSchema, 'params'), h(components.get));
+  r.post('/components', write, validate(ComponentInputSchema), h(components.create));
+  r.put('/components/:id', write, validate(IdParamSchema, 'params'), validate(ComponentInputSchema), h(components.update));
+  r.delete('/components/:id/permanent', write, validate(IdParamSchema, 'params'), h(components.remove));
+  r.delete('/components/:id', write, validate(IdParamSchema, 'params'), validate(SetActiveQuerySchema, 'query'), h(components.setActive));
 
   // Periods — guarded flow: no manual status transitions (Prepare/Approve move the status)
   r.get('/periods', read, validate(PeriodQuerySchema, 'query'), h(periods.list));
@@ -73,7 +81,7 @@ export function buildPayrollRouter(): Router {
   r.post('/rates/hra-cca/:id/revise', write, validate(IdParamSchema, 'params'), validate(HraCcaRateReviseSchema), h(hraCca.revise));
   r.delete('/rates/hra-cca/:id', write, validate(IdParamSchema, 'params'), h(hraCca.deactivate));
 
-  // Next steps (docs §3): components CRUD, component-assignments, settings,
+  // Next steps (docs §3): component-assignments, settings,
   // payrolls (compute, preparation, withhold,
   // approve-run, mark-paid), period-attendance, period-deductions, manual-deductions, readiness,
   // reports, payslips, my-payslips, da-arrears, sls, retirement-leave-encashment, neft.

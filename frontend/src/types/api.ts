@@ -47,8 +47,17 @@ export interface PayrollComponent {
   component_type: 1 | 2 | 3;
   is_da_applicable: boolean;
   is_surrender_leave_applicable: boolean;
+  is_income_tax_applicable: boolean;
   display_order: number | null;
+  calculation_method: string | null;
+  calculation_basis: string | null;
+  minimum_amount: string;
+  maximum_amount: string;
   is_active: boolean;
+  /** Rows in assignments / payroll details / deductions that reference this component. */
+  usage_count: number;
+  /** Code the payroll calculator depends on — code and type locked, cannot be deactivated or deleted. */
+  is_system: boolean;
 }
 
 export interface Branch { id: number; code: string; name: string; type: 'HO' | 'BRANCH'; place_id: number | null; is_active: boolean }
@@ -309,4 +318,41 @@ export interface HraCcaCoverage {
   asOn: string;
   keysWithEmployees: number;
   missing: Array<{ keyId: number | null; keyName: string; employeeCount: number }>;
+}
+
+// ---------------------------------------------------------------- HR › Attendance
+export type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'LEAVE' | 'HOLIDAY' | 'HALF_DAY';
+
+export interface AttendanceDay { date: string; day: number; weekday: number; locked: boolean }
+
+export interface AttendanceEmployee {
+  id: number;
+  employee_code: string;
+  employee_name: string;
+  designation_name: string;
+  date_of_joining: string | null;
+  date_of_leaving: string | null;
+  branch_id: number;
+}
+
+export interface AttendanceMonth {
+  branch: { id: number; code: string; name: string };
+  year: number;
+  month: number;
+  today: string;
+  days: AttendanceDay[];
+  lockedReason: string | null;
+  employees: AttendanceEmployee[];
+  records: Record<number, Record<string, { status: AttendanceStatus; remarks: string | null; branchId: number }>>;
+}
+
+export interface AttendanceImportRow { line: number; code: string; date: string; status: string }
+
+export interface AttendanceImportResult {
+  total: number;
+  valid: number;
+  imported: number;
+  /** Marks equal to what is already saved — skipped. */
+  unchanged: number;
+  errors: Array<{ line: number; code: string; date: string; message: string }>;
 }

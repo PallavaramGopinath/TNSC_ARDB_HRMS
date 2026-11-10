@@ -1,5 +1,5 @@
 import { api } from './api';
-import type { LeaveType, BankMaster, BranchMaster, Designation, Employee, EmployeeListItem, Paged, ServiceHistoryRow } from '@/types/api';
+import type { AttendanceImportResult, AttendanceImportRow, AttendanceMonth, AttendanceStatus, LeaveType, BankMaster, BranchMaster, Designation, Employee, EmployeeListItem, Paged, ServiceHistoryRow } from '@/types/api';
 
 export interface DesignationInput {
   designationName: string;
@@ -48,7 +48,17 @@ export interface EmployeeListParams {
 /** Form payload: camelCase keys; blank strings are sent as-is and become null on the server. */
 export type EmployeePayload = Record<string, string | number | boolean | null | undefined>;
 
+export interface AttendanceEntry { employeeId: number; date: string; status: AttendanceStatus | null; remarks?: string | null }
+
 export const hrApi = {
+  attendances: {
+    month: (params: { branchId: number; year: number; month: number }) =>
+      api.get<AttendanceMonth>('/hr/attendances', { params }).then((r) => r.data),
+    save: (body: { branchId: number; entries: AttendanceEntry[] }) =>
+      api.put<{ saved: number; cleared: number }>('/hr/attendances', body).then((r) => r.data),
+    import: (body: { rows: AttendanceImportRow[]; dryRun: boolean }) =>
+      api.post<AttendanceImportResult>('/hr/attendances/import', body).then((r) => r.data),
+  },
   designations: {
     list: (params?: { search?: string; includeInactive?: boolean }) =>
       api.get<Designation[]>('/hr/designations', { params }).then((r) => r.data),
