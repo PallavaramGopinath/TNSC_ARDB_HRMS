@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { createColumnHelper } from '@tanstack/react-table';
-import { Plus, Search } from 'lucide-react';
+import { Eye, Pencil, Plus, Search } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Badge } from '@/components/ui/Badge';
@@ -74,8 +74,18 @@ export function EmployeesPage() {
       col.accessor('date_of_leaving', { header: 'Left', cell: (c) => formatDate(c.getValue()) }),
       col.accessor('basic_salary', { header: () => <span className="block text-right">Basic</span>, cell: (c) => <span className="block text-right tabular-nums">{formatINR(c.getValue())}</span> }),
       col.display({ id: 'status', header: 'Status', cell: (c) => (c.row.original.date_of_leaving ? <Badge>Left</Badge> : <Badge tone="success">Active</Badge>) }),
+      col.display({
+        id: 'actions',
+        header: '',
+        cell: ({ row: { original: e } }) => (
+          <div className="flex justify-end gap-1">
+            <Button variant="ghost" aria-label={`View ${e.employee_code}`} title="View" onClick={() => navigate(`/hr/employees/${e.id}`)}><Eye size={14} /></Button>
+            {canEdit && <Button variant="ghost" aria-label={`Edit ${e.employee_code}`} title="Edit" onClick={() => navigate(`/hr/employees/${e.id}/edit`)}><Pencil size={14} /></Button>}
+          </div>
+        ),
+      }),
     ],
-    [],
+    [canEdit, navigate],
   );
 
   return (
@@ -104,7 +114,7 @@ export function EmployeesPage() {
           <option value="all">All</option>
         </select>
       </div>
-      <DataTable data={list.data?.items ?? []} columns={columns} loading={list.isLoading} empty="No employees match these filters" />
+      <DataTable data={list.data?.items ?? []} columns={columns} loading={list.isLoading} empty="No employees match these filters" pinActions />
       {list.data && <Pagination page={page} pageSize={list.data.pageSize} total={list.data.total} onPage={(p) => set({ page: String(p) })} />}
     </>
   );
