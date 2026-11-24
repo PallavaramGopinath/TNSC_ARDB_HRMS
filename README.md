@@ -82,7 +82,7 @@ specs/           feature specs in Markdown, NNN-short-title.md (see specs/README
 |---|---|
 | `npm run dev` | API (tsx watch) and web (Vite) together |
 | `npm run build` | Type-check and build both workspaces |
-| `npm test` | Backend unit tests, including TNCU parity values for rounding, segments, gratuity and increments. Set `TEST_DATABASE_URL` to a migrated throwaway database named `…_test` to also run the API tests; they wipe its grades and designations |
+| `npm test` | Backend unit tests, including TNCU parity values for rounding, segments, gratuity and increments. Set `TEST_DATABASE_URL` to a migrated throwaway database named `…_test` to also run the API tests; they wipe its employees, grades and designations |
 | `npm run db:migrate` | Apply the baseline (if the DB is empty), then pending `database/migrations/*.sql` |
 | `npm run db:seed` | Re-run the idempotent seed (menu, settings, masters) |
 | `npm run db:codegen -w backend` | Generate Kysely types for every table from the live DB |

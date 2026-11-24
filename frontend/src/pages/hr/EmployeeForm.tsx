@@ -133,7 +133,7 @@ export function EmployeeFormPage() {
       <div className="space-y-5">
         <Section id="personal" title="Personal">
           <Grid>
-            <Field label="Employee code" inputMode="numeric" maxLength={20} placeholder={editing ? undefined : 'Blank = generated'} {...register('employeeCode')} error={err('employeeCode')} />
+            <Field label="Employee code" inputMode="numeric" maxLength={20} placeholder={editing ? undefined : 'Blank = generated'} {...register('employeeCode', { validate: (v) => !v.trim() || v.trim() === existing.data?.employee_code || /^\d+$/.test(v.trim()) || 'Employee code must be digits only' })} error={err('employeeCode')} />
             <Field label="Employee name *" {...register('employeeName', req('Employee name'))} error={err('employeeName')} />
             <Field label="Name in Tamil" className="field-input font-tamil" {...register('employeeNameTamil')} error={err('employeeNameTamil')} />
             <Select label="Gender" options={Gender.map((g) => ({ value: g, label: GenderLabel[g] }))} {...register('gender')} error={err('gender')} />

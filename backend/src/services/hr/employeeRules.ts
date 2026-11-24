@@ -29,6 +29,12 @@ export function addYears(d: string, n: number): string {
 export const isCompassionate = (i: Pick<EmployeeInput, 'specialCategory' | 'modeOfRecruitment'>) =>
   i.specialCategory === 'COMPASSIONATE_GROUND' || (!i.specialCategory && i.modeOfRecruitment === 'COMPASSIONATE_GROUND');
 
+/** A typed code must be digits; blank, or the employee's current code unchanged (e.g. EMP001), is fine. */
+export function employeeCodeError(code: string | null | undefined, current?: string): string | null {
+  if (!code || code === current) return null;
+  return /^[0-9]{1,20}$/.test(code) ? null : 'Employee code must be digits only (max 20)';
+}
+
 export function validateEmployee(i: EmployeeInput, ctx: RuleContext): FieldErrors {
   const e: FieldErrors = {};
   const doj = i.dateOfJoining;
