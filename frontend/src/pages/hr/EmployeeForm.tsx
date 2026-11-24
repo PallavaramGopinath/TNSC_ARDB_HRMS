@@ -23,7 +23,7 @@ const FIELDS = [
   'employeeName', 'employeeNameTamil', 'gender', 'dateOfBirth', 'maritalStatus', 'bloodGroup', 'height', 'weight',
   'mobile', 'email', 'address', 'city', 'district', 'state', 'pincode',
   'panNumber', 'aadharNumber', 'epfNumber', 'bankMasterId', 'bankBranch', 'accountNumber', 'ifscCode',
-  'designationId', 'grade', 'branchId', 'employmentType', 'modeOfRecruitment', 'dateOfJoining', 'dateOfRetirement', 'dateOfLeaving',
+  'designationId', 'seniorityOrder', 'grade', 'branchId', 'employmentType', 'modeOfRecruitment', 'dateOfJoining', 'dateOfRetirement', 'dateOfLeaving',
   'incrementMonth', 'scaleOfPay', 'basicSalary',
   'appointmentOrderNo', 'appointmentOrderDate', 'sponsoredBy', 'probationMonths', 'appointmentRemarks',
   'probationExtensionMonths', 'probationExtensionOrderNo', 'probationExtensionOrderDate', 'probationTestPassed', 'probationTestPassedOn',
@@ -139,8 +139,8 @@ export function EmployeeFormPage() {
             <Field label="Date of birth" type="date" {...register('dateOfBirth')} error={err('dateOfBirth')} />
             <Select label="Marital status" options={enumOptions(MaritalStatus)} {...register('maritalStatus')} error={err('maritalStatus')} />
             <Select label="Blood group" options={BloodGroups.map((b) => ({ value: b, label: b }))} {...register('bloodGroup')} error={err('bloodGroup')} />
-            <Field label="Height (cm) *" type="number" step="0.1" {...register('height', req('Height'))} error={err('height')} />
-            <Field label="Weight (kg) *" type="number" step="0.1" {...register('weight', req('Weight'))} error={err('weight')} />
+            <Field label="Height (cm)" type="number" step="0.1" {...register('height')} error={err('height')} />
+            <Field label="Weight (kg)" type="number" step="0.1" {...register('weight')} error={err('weight')} />
           </Grid>
         </Section>
 
@@ -173,6 +173,7 @@ export function EmployeeFormPage() {
         <Section id="service" title="Service">
           <Grid>
             <Select label="Designation *" options={designationOptions} placeholder={designationOptions.length ? 'Select…' : 'Add designations first'} {...register('designationId', req('Designation'))} error={err('designationId')} />
+            <Field label="Seniority" type="number" min={1} max={999} {...register('seniorityOrder')} error={err('seniorityOrder')} />
             <Field label="Grade" {...register('grade')} error={err('grade')} />
             <Select label="Branch (posting) *" options={(branches.data ?? []).map((b) => ({ value: b.id, label: `${b.name} (${b.code})` }))} disabled={editing} {...register('branchId', req('Branch'))} error={err('branchId')} hint={editing ? 'Change the posting through Transfers' : undefined} />
             <Select label="Employment type" options={enumOptions(EmploymentType)} {...register('employmentType')} error={err('employmentType')} />

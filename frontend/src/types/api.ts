@@ -132,8 +132,8 @@ export interface Employee {
   date_of_birth: string | null;
   marital_status: string | null;
   blood_group: string | null;
-  height: string;
-  weight: string;
+  height: string | null;
+  weight: string | null;
   mobile: string | null;
   email: string | null;
   address: string | null;
@@ -151,6 +151,7 @@ export interface Employee {
   ifsc_code: string | null;
   designation_id: number;
   designation_name: string;
+  seniority_order: number | null;
   grade: string | null;
   branch_id: number;
   branch_name: string;

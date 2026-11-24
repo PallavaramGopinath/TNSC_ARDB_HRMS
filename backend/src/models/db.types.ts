@@ -246,8 +246,9 @@ export interface EmployeeTable {
   grade: string | null;
   increment_month: number;
   marital_status: string | null;
-  height: Numeric;
-  weight: Numeric;
+  height: Numeric | null;
+  weight: Numeric | null;
+  seniority_order: number | null;
   blood_group: string | null;
   scale_of_pay: string | null;
   branch_id: number;
