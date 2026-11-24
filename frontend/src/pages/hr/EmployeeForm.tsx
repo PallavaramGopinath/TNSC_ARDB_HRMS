@@ -20,7 +20,7 @@ import {
 
 /** Every form field (camelCase = API payload key; snake_case of it = DB column). */
 const FIELDS = [
-  'employeeName', 'employeeNameTamil', 'gender', 'dateOfBirth', 'maritalStatus', 'bloodGroup', 'height', 'weight',
+  'employeeCode', 'employeeName', 'employeeNameTamil', 'gender', 'dateOfBirth', 'maritalStatus', 'bloodGroup', 'height', 'weight',
   'mobile', 'email', 'address', 'city', 'district', 'state', 'pincode',
   'panNumber', 'aadharNumber', 'epfNumber', 'bankMasterId', 'bankBranch', 'accountNumber', 'ifscCode',
   'designationId', 'seniorityOrder', 'grade', 'branchId', 'employmentType', 'modeOfRecruitment', 'dateOfJoining', 'dateOfRetirement', 'dateOfLeaving',
@@ -119,7 +119,7 @@ export function EmployeeFormPage() {
       </Link>
       <PageHeader
         title={editing ? `Edit ${existing.data?.employee_code} · ${existing.data?.employee_name}` : 'New employee'}
-        subtitle={editing ? undefined : 'The employee code is generated on save'}
+        subtitle={editing ? undefined : 'Leave the code blank to generate it on save'}
       />
 
       <nav className="mb-4 flex flex-wrap gap-2" aria-label="Form sections">
@@ -133,6 +133,7 @@ export function EmployeeFormPage() {
       <div className="space-y-5">
         <Section id="personal" title="Personal">
           <Grid>
+            <Field label="Employee code" inputMode="numeric" maxLength={20} placeholder={editing ? undefined : 'Blank = generated'} {...register('employeeCode')} error={err('employeeCode')} />
             <Field label="Employee name *" {...register('employeeName', req('Employee name'))} error={err('employeeName')} />
             <Field label="Name in Tamil" className="field-input font-tamil" {...register('employeeNameTamil')} error={err('employeeNameTamil')} />
             <Select label="Gender" options={Gender.map((g) => ({ value: g, label: GenderLabel[g] }))} {...register('gender')} error={err('gender')} />

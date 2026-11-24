@@ -24,6 +24,8 @@ const money = z.preprocess(blank, z.coerce.number().min(0, 'Cannot be negative')
 /** Create / update payload (camelCase; mapped to snake_case columns in the service). */
 export const EmployeeInputSchema = z.object({
   // personal
+  /** Optional manual code (digits only, max 20). Blank → generated on create; kept as-is on update. */
+  employeeCode: z.preprocess(blank, z.string().trim().regex(/^[0-9]{1,20}$/, 'Employee code must be digits only (max 20 characters)').nullable()).optional(),
   employeeName: z.string().trim().min(1, 'Employee name is required').max(200),
   employeeNameTamil: str(200),
   gender: en(Gender),

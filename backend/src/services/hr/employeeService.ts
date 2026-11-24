@@ -158,6 +158,13 @@ async function nextEmployeeCode(trx: Tx): Promise<string> {
   return `${prefix}${String(next).padStart(pad, '0')}`;
 }
 
+/** True when another employee (other than `exceptId`) already holds this code. */
+async function codeTaken(trx: Tx, code: string, exceptId?: number): Promise<boolean> {
+  let q = trx.selectFrom('hr.employees').select('id').where('employee_code', '=', code);
+  if (exceptId !== undefined) q = q.where('id', '<>', exceptId);
+  return !!(await q.executeTakeFirst());
+}
+
 // ------------------------------------------------------------------------------------- writes
 export async function create(actor: Actor, raw: EmployeeInput) {
   if (raw.dateOfLeaving) throw invalid({ dateOfLeaving: ['Date of leaving cannot be set when creating an employee'] });
@@ -169,7 +176,13 @@ export async function create(actor: Actor, raw: EmployeeInput) {
     const refErrs = await checkReferences(trx, input);
     if (hasErrors(refErrs)) throw invalid(refErrs);
 
-    const code = await nextEmployeeCode(trx);
+    // A typed code is used as-is; a blank one is generated (EMP001 style).
+    let code = input.employeeCode ?? null;
+    if (code) {
+      if (await codeTaken(trx, code)) throw invalid({ employeeCode: ['Employee code already exists'] });
+    } else {
+      code = await nextEmployeeCode(trx);
+    }
     const designation = await trx.selectFrom('hr.employee_designations').select('designation_name').where('id', '=', input.designationId).executeTakeFirstOrThrow();
     const row = await trx
       .insertInto('hr.employees')
@@ -215,6 +228,12 @@ export async function update(actor: Actor, id: number, raw: EmployeeInput) {
     const refErrs = await checkReferences(trx, input, current);
     if (hasErrors(refErrs)) throw invalid(refErrs);
 
+    // A blank code keeps the current one; a changed code must be free.
+    const newCode = input.employeeCode ?? current.employee_code;
+    if (newCode !== current.employee_code && (await codeTaken(trx, newCode, id))) {
+      throw invalid({ employeeCode: ['Employee code already exists'] });
+    }
+
     const newDol = input.dateOfLeaving ?? null;
     if (newDol !== current.date_of_leaving && newDol !== null) {
       const retired = await trx.selectFrom('hr.employee_retirements').select('id').where('employee_id', '=', id).where('is_active', '=', true).executeTakeFirst();
@@ -238,6 +257,7 @@ export async function update(actor: Actor, id: number, raw: EmployeeInput) {
       .updateTable('hr.employees')
       .set({
         ...(toColumns({ ...input, dateOfLeaving: newDol }) as object),
+        employee_code: newCode,
         designation,
         basic_salary: input.basicSalary ?? current.basic_salary,
         updated_by: actorName(actor),
