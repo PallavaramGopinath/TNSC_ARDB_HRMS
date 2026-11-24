@@ -3,14 +3,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createColumnHelper } from '@tanstack/react-table';
 import { Pencil, Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
+import { Link } from 'react-router-dom';
 import { z } from 'zod';
+import { gradeOptions } from '@/components/hr/gradeOptions';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { DataTable } from '@/components/ui/DataTable';
 import { Field } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { Select } from '@/components/ui/Select';
 import { errorMessage } from '@/services/api';
 import { hrApi } from '@/services/hr';
 import type { Designation } from '@/types/api';
@@ -87,7 +90,9 @@ export function DesignationsPage() {
 }
 
 function DesignationForm({ initial, onClose, onSaved }: { initial: Designation | null; onClose: () => void; onSaved: () => void }) {
-  const { register, handleSubmit, formState } = useForm<Form>({
+  // Refetched each time the dialog opens, so grades just added on the Grades page are listed.
+  const grades = useQuery({ queryKey: ['grades', 'active'], queryFn: () => hrApi.grades.list({ active: true }), refetchOnMount: 'always' });
+  const { control, register, handleSubmit, formState } = useForm<Form>({
     resolver: zodResolver(schema),
     defaultValues: {
       designationName: initial?.designation_name ?? '',
@@ -109,8 +114,26 @@ function DesignationForm({ initial, onClose, onSaved }: { initial: Designation |
     <Modal open title={initial ? 'Edit designation' : 'New designation'} onClose={onClose}>
       <form onSubmit={handleSubmit((v) => save.mutate(v))} className="space-y-4" noValidate>
         <Field label="Designation name" autoFocus {...register('designationName')} error={formState.errors.designationName?.message} />
-        <div className="grid grid-cols-3 gap-3">
-          <Field label="Grade" {...register('grade')} error={formState.errors.grade?.message} />
+        {/* Controlled, so options that load after the first render cannot blank the saved grade. */}
+        <Controller
+          control={control}
+          name="grade"
+          render={({ field }) => (
+            <Select
+              label="Grade"
+              placeholder="— Select grade —"
+              options={gradeOptions(grades.data, initial?.grade)}
+              {...field}
+              error={formState.errors.grade?.message ?? (grades.isError ? 'Could not load grades' : undefined)}
+            />
+          )}
+        />
+        {grades.data?.length === 0 && (
+          <p className="text-xs text-ink-500">
+            No grades defined — add them on the <Link to="/hr/grades" className="font-medium text-brand-700 underline">Grades page</Link>.
+          </p>
+        )}
+        <div className="grid grid-cols-2 gap-3">
           <Field label="Pay level" {...register('payLevel')} error={formState.errors.payLevel?.message} />
           <Field label="Seniority" type="number" min={1} max={999} {...register('seniorityOrder')} error={formState.errors.seniorityOrder?.message} />
         </div>

@@ -183,6 +183,18 @@ export interface EmployeeDesignationTable {
   updated_at: Timestamp | null;
 }
 
+export interface EmployeeGradeTable {
+  id: Generated<number>;
+  grade_code: string;
+  description: string | null;
+  display_order: number | null;
+  is_active: Generated<boolean>;
+  created_by: string;
+  created_at: Generated<Timestamp>;
+  updated_by: string | null;
+  updated_at: Timestamp | null;
+}
+
 export interface EmployeeLeaveTypeTable {
   id: Generated<number>;
   leave_name: string;
@@ -453,6 +465,7 @@ export interface Database {
   'auth.refresh_tokens': RefreshTokenTable;
   'audit.activity_logs': ActivityLogTable;
   'hr.employee_designations': EmployeeDesignationTable;
+  'hr.employee_grades': EmployeeGradeTable;
   'hr.bank_masters': BankMasterTable;
   'hr.employee_leave_types': EmployeeLeaveTypeTable;
   'hr.employees': EmployeeTable;

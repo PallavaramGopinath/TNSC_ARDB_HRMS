@@ -1,11 +1,13 @@
 import { Router } from 'express';
 import * as designations from '../controllers/hr/designationController';
+import * as grades from '../controllers/hr/gradeController';
 import * as banks from '../controllers/hr/bankMasterController';
 import * as employees from '../controllers/hr/employeeController';
 import * as leaveTypes from '../controllers/hr/leaveTypeController';
 import * as branches from '../controllers/hr/branchController';
 import * as attendances from '../controllers/hr/attendanceController';
 import { AttendanceImportSchema, AttendanceMonthQuerySchema, AttendanceSaveSchema } from '../models/hr/attendance.schema';
+import { GradeInputSchema, GradeQuerySchema } from '../models/hr/grade.schema';
 import { BranchInputSchema, BranchQuerySchema } from '../models/hr/branch.schema';
 import { LeaveTypeInputSchema, LeaveTypeQuerySchema } from '../models/hr/leaveType.schema';
 import { BankInputSchema, BankQuerySchema, SetActiveQuerySchema } from '../models/hr/bankMaster.schema';
@@ -31,6 +33,13 @@ export function buildHrRouter(): Router {
   r.post('/designations', hrMasters, validate(DesignationInputSchema), h(designations.create));
   r.put('/designations/:id', hrMasters, validate(IdParamSchema, 'params'), validate(DesignationInputSchema), h(designations.update));
   r.delete('/designations/:id', hrMasters, validate(IdParamSchema, 'params'), h(designations.remove));
+
+  // Grades — DELETE is permanent and only for unused grades; deactivate through PUT isActive
+  r.get('/grades', hrMasters, validate(GradeQuerySchema, 'query'), h(grades.list));
+  r.get('/grades/:id', hrMasters, validate(IdParamSchema, 'params'), h(grades.get));
+  r.post('/grades', hrMasters, validate(GradeInputSchema), h(grades.create));
+  r.put('/grades/:id', hrMasters, validate(IdParamSchema, 'params'), validate(GradeInputSchema), h(grades.update));
+  r.delete('/grades/:id', hrMasters, validate(IdParamSchema, 'params'), h(grades.remove));
 
   // Employees — read Admin/HR/Payroll, write Admin/HR (TNCU matrix)
   r.get('/employees', hrRead, validate(EmployeeQuerySchema, 'query'), h(employees.list));
