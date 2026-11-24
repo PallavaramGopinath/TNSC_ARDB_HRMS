@@ -1,4 +1,5 @@
 import { flexRender, getCoreRowModel, getSortedRowModel, useReactTable, type ColumnDef, type SortingState } from '@tanstack/react-table';
+import clsx from 'clsx';
 import { ArrowDown, ArrowUp } from 'lucide-react';
 import { useState } from 'react';
 
@@ -7,10 +8,12 @@ interface Props<T> {
   columns: ColumnDef<T, any>[];
   loading?: boolean;
   empty?: string;
+  /** Keep the column with id 'actions' in view at the right edge while a wide grid scrolls sideways. */
+  pinActions?: boolean;
 }
 
 /** Sortable grid — stands in for TNCU's Syncfusion SfGrid. */
-export function DataTable<T>({ data, columns, loading, empty = 'No records' }: Props<T>) {
+export function DataTable<T>({ data, columns, loading, empty = 'No records', pinActions }: Props<T>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const table = useReactTable({
     data,
@@ -21,6 +24,8 @@ export function DataTable<T>({ data, columns, loading, empty = 'No records' }: P
     getSortedRowModel: getSortedRowModel(),
   });
 
+  const pinned = (columnId: string, bg: string) => pinActions && columnId === 'actions' && `sticky right-0 border-l border-ink-100 ${bg}`;
+
   return (
     <div className="card overflow-x-auto">
       <table className="min-w-full text-sm">
@@ -28,7 +33,7 @@ export function DataTable<T>({ data, columns, loading, empty = 'No records' }: P
           {table.getHeaderGroups().map((hg) => (
             <tr key={hg.id}>
               {hg.headers.map((h) => (
-                <th key={h.id} className="whitespace-nowrap px-4 py-2.5">
+                <th key={h.id} className={clsx('whitespace-nowrap px-4 py-2.5', pinned(h.column.id, 'bg-ink-50'))}>
                   {h.isPlaceholder ? null : (
                     <button
                       type="button"
@@ -53,9 +58,9 @@ export function DataTable<T>({ data, columns, loading, empty = 'No records' }: P
             <tr><td colSpan={columns.length} className="px-4 py-8 text-center text-ink-400">{empty}</td></tr>
           ) : (
             table.getRowModel().rows.map((row) => (
-              <tr key={row.id} className="hover:bg-brand-25">
+              <tr key={row.id} className="group hover:bg-brand-25">
                 {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="whitespace-nowrap px-4 py-2.5 text-ink-800">
+                  <td key={cell.id} className={clsx('whitespace-nowrap px-4 py-2.5 text-ink-800', pinned(cell.column.id, 'bg-white group-hover:bg-brand-25'))}>
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>
                 ))}
