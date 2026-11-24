@@ -68,7 +68,7 @@ export function EmployeeProfilePage() {
           <Detail label="Date of birth" value={formatDate(e.date_of_birth)} />
           <Detail label="Marital status" value={humanize(e.marital_status)} />
           <Detail label="Blood group" value={e.blood_group} />
-          <Detail label="Height / weight" value={`${Number(e.height)} cm / ${Number(e.weight)} kg`} />
+          <Detail label="Height / weight" value={[e.height && `${Number(e.height)} cm`, e.weight && `${Number(e.weight)} kg`].filter(Boolean).join(' / ')} />
           <Detail label="Mobile" value={e.mobile} />
           <Detail label="Email" value={e.email} />
           <Detail label="Address" value={[e.address, e.city, e.district, e.state, e.pincode].filter(Boolean).join(', ')} />
@@ -90,6 +90,7 @@ export function EmployeeProfilePage() {
       <Section title="Service">
         <Grid cols={4}>
           <Detail label="Designation" value={e.designation_name} />
+          <Detail label="Seniority" value={e.seniority_order} />
           <Detail label="Grade" value={e.grade} />
           <Detail label="Branch" value={e.branch_name} />
           <Detail label="Employment type" value={humanize(e.employment_type)} />

@@ -74,4 +74,28 @@ describe('EmployeeInputSchema', () => {
     expect(Object.keys(r.success ? {} : r.error.flatten().fieldErrors).sort()).toEqual(['aadharNumber', 'mobile', 'panNumber']);
   });
   it('accepts spaced Aadhaar', () => expect(base({ aadharNumber: '1234 5678 9012' as never }).aadharNumber).toBe('123456789012'));
+
+  const parse = (over: object) => {
+    const r = EmployeeInputSchema.safeParse({ ...base(), ...over });
+    return { value: r.data, errors: r.success ? {} : r.error.flatten().fieldErrors };
+  };
+
+  it('height and weight may be blank', () => {
+    const { height: _h, weight: _w, ...rest } = base();
+    expect(EmployeeInputSchema.safeParse(rest).success).toBe(true);
+    for (const blank of ['', '  ', null]) expect(parse({ height: blank, weight: blank }).value).toMatchObject({ height: null, weight: null });
+  });
+  it('height and weight are range-checked when entered', () => {
+    expect(parse({ height: '50', weight: '20' }).value).toMatchObject({ height: 50, weight: 20 });
+    expect(parse({ height: '250', weight: '250' }).value).toMatchObject({ height: 250, weight: 250 });
+    for (const height of ['0', '20', '251', 'tall']) expect(parse({ height }).errors).toEqual({ height: ['Height in cm (50–250)'] });
+    for (const weight of ['0', '19', '251', 'heavy']) expect(parse({ weight }).errors).toEqual({ weight: ['Weight in kg (20–250)'] });
+  });
+  it('seniority is optional, a whole number 1–999', () => {
+    expect(base().seniorityOrder).toBeFalsy();
+    expect(parse({ seniorityOrder: '' }).value).toMatchObject({ seniorityOrder: null });
+    for (const n of ['1', '999']) expect(parse({ seniorityOrder: n }).value).toMatchObject({ seniorityOrder: Number(n) });
+    for (const n of ['0', '1000', '-1', 'abc']) expect(parse({ seniorityOrder: n }).errors).toEqual({ seniorityOrder: ['Seniority 1–999'] });
+    expect(parse({ seniorityOrder: '1.5' }).errors).toEqual({ seniorityOrder: ['Seniority must be a whole number'] });
+  });
 });

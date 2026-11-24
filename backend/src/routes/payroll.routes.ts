@@ -85,5 +85,6 @@ export function buildPayrollRouter(): Router {
   // payrolls (compute, preparation, withhold,
   // approve-run, mark-paid), period-attendance, period-deductions, manual-deductions, readiness,
   // reports, payslips, my-payslips, da-arrears, sls, retirement-leave-encashment, neft.
+  // Anything that prints employees must order by payrollPrintOrder (services/payroll/printOrder.ts).
   return r;
 }

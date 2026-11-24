@@ -14,6 +14,8 @@ const upper = (max: number, re?: RegExp, msg?: string) =>
   }, (re ? z.string().regex(re, msg) : z.string()).max(max).nullable()).optional();
 const date = z.preprocess(blank, z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a valid date').nullable()).optional();
 const int = (min: number, max: number) => z.preprocess(blank, z.coerce.number().int().min(min).max(max).nullable()).optional();
+const ranged = (min: number, max: number, msg: string) =>
+  z.preprocess(blank, z.coerce.number({ invalid_type_error: msg }).min(min, msg).max(max, msg).nullable()).optional();
 const id = z.preprocess(blank, z.coerce.number().int().positive().nullable()).optional();
 const en = <T extends readonly [string, ...string[]]>(values: T) => z.preprocess(blank, z.enum(values).nullable()).optional();
 const bool = z.preprocess((v) => (v === '' || v === undefined ? null : v === 'true' ? true : v === 'false' ? false : v), z.boolean().nullable()).optional();
@@ -28,8 +30,8 @@ export const EmployeeInputSchema = z.object({
   dateOfBirth: date,
   maritalStatus: en(MaritalStatus),
   bloodGroup: str(10),
-  height: z.coerce.number({ invalid_type_error: 'Height is required' }).min(50, 'Height in cm (50–250)').max(250, 'Height in cm (50–250)'),
-  weight: z.coerce.number({ invalid_type_error: 'Weight is required' }).min(20, 'Weight in kg (20–250)').max(250, 'Weight in kg (20–250)'),
+  height: ranged(50, 250, 'Height in cm (50–250)'),
+  weight: ranged(20, 250, 'Weight in kg (20–250)'),
   // contact
   mobile: z.preprocess(blank, z.string().trim().regex(/^[6-9]\d{9}$/, 'Enter a 10-digit mobile number').nullable()).optional(),
   email: z.preprocess(blank, z.string().trim().email('Enter a valid email').max(100).nullable()).optional(),
@@ -48,6 +50,9 @@ export const EmployeeInputSchema = z.object({
   ifscCode: upper(11, /^[A-Z]{4}0[A-Z0-9]{6}$/, 'IFSC: 4 letters, 0, then 6 letters/digits'),
   // service
   designationId: z.coerce.number({ invalid_type_error: 'Designation is required' }).int().positive('Designation is required'),
+  seniorityOrder: z
+    .preprocess(blank, z.coerce.number({ invalid_type_error: 'Seniority 1–999' }).int('Seniority must be a whole number').min(1, 'Seniority 1–999').max(999, 'Seniority 1–999').nullable())
+    .optional(),
   grade: str(50),
   branchId: z.coerce.number({ invalid_type_error: 'Branch is required' }).int().positive('Branch is required'),
   employmentType: en(EmploymentType),
