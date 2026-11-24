@@ -24,6 +24,8 @@ const money = z.preprocess(blank, z.coerce.number().min(0, 'Cannot be negative')
 /** Create / update payload (camelCase; mapped to snake_case columns in the service). */
 export const EmployeeInputSchema = z.object({
   // personal
+  /** Blank → generated on create, kept on update. The digits-only rule is employeeCodeError: an unchanged generated code (EMP001) must still save. */
+  employeeCode: str(20),
   employeeName: z.string().trim().min(1, 'Employee name is required').max(200),
   employeeNameTamil: str(200),
   gender: en(Gender),

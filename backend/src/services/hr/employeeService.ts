@@ -1,7 +1,7 @@
 /**
  * Employees — port of TNCU TNCU.Business/HR/EmployeeService.cs with the ARDB changes:
  *  - no Party (KYC) Master: KYC and bank fields live on the employee (D12)
- *  - employee code generated here: {hr.employee_code_prefix}{n padded to hr.employee_code_pad}
+ *  - employee code: typed digits, or if blank generated here as {hr.employee_code_prefix}{n padded to hr.employee_code_pad}
  *  - self-service login provisioning deferred
  */
 import { sql } from 'kysely';
@@ -12,7 +12,7 @@ import { AppError } from '../../lib/errors';
 import { getSetting } from '../../lib/settings';
 import type { EmployeeTable } from '../../models/db.types';
 import type { EmployeeInput, EmployeeQuery } from '../../models/hr/employee.schema';
-import { hasErrors, validateEmployee, type FieldErrors } from './employeeRules';
+import { employeeCodeError, hasErrors, validateEmployee, type FieldErrors } from './employeeRules';
 
 const invalid = (errors: FieldErrors) => new AppError(400, 'Validation failed', 'VALIDATION', errors);
 
@@ -158,6 +158,15 @@ async function nextEmployeeCode(trx: Tx): Promise<string> {
   return `${prefix}${String(next).padStart(pad, '0')}`;
 }
 
+/** A typed code must be well-formed and free. Blank, or the employee's own current code, passes. */
+async function checkCode(trx: Tx, code: string | null | undefined, current?: string): Promise<void> {
+  if (!code || code === current) return;
+  const msg = employeeCodeError(code, current);
+  if (msg) throw invalid({ employeeCode: [msg] });
+  const taken = await trx.selectFrom('hr.employees').select('id').where('employee_code', '=', code).executeTakeFirst();
+  if (taken) throw invalid({ employeeCode: ['Employee code already exists'] });
+}
+
 // ------------------------------------------------------------------------------------- writes
 export async function create(actor: Actor, raw: EmployeeInput) {
   if (raw.dateOfLeaving) throw invalid({ dateOfLeaving: ['Date of leaving cannot be set when creating an employee'] });
@@ -169,7 +178,9 @@ export async function create(actor: Actor, raw: EmployeeInput) {
     const refErrs = await checkReferences(trx, input);
     if (hasErrors(refErrs)) throw invalid(refErrs);
 
-    const code = await nextEmployeeCode(trx);
+    // A typed code is used as-is; a blank one is generated (EMP001 style).
+    await checkCode(trx, input.employeeCode);
+    const code = input.employeeCode || (await nextEmployeeCode(trx));
     const designation = await trx.selectFrom('hr.employee_designations').select('designation_name').where('id', '=', input.designationId).executeTakeFirstOrThrow();
     const row = await trx
       .insertInto('hr.employees')
@@ -215,6 +226,10 @@ export async function update(actor: Actor, id: number, raw: EmployeeInput) {
     const refErrs = await checkReferences(trx, input, current);
     if (hasErrors(refErrs)) throw invalid(refErrs);
 
+    // A blank code keeps the current one; a changed code must be free.
+    await checkCode(trx, input.employeeCode, current.employee_code);
+    const newCode = input.employeeCode || current.employee_code;
+
     const newDol = input.dateOfLeaving ?? null;
     if (newDol !== current.date_of_leaving && newDol !== null) {
       const retired = await trx.selectFrom('hr.employee_retirements').select('id').where('employee_id', '=', id).where('is_active', '=', true).executeTakeFirst();
@@ -238,6 +253,7 @@ export async function update(actor: Actor, id: number, raw: EmployeeInput) {
       .updateTable('hr.employees')
       .set({
         ...(toColumns({ ...input, dateOfLeaving: newDol }) as object),
+        employee_code: newCode,
         designation,
         basic_salary: input.basicSalary ?? current.basic_salary,
         updated_by: actorName(actor),
