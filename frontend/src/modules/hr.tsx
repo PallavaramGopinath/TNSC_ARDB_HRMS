@@ -9,6 +9,7 @@ export const hrModule: FrontendModule = {
   menuId: 12000010,
   routes: [
     { path: '/hr/designations', element: page(() => import('@/pages/hr/Designations'), 'DesignationsPage') },
+    { path: '/hr/grades', element: page(() => import('@/pages/hr/Grades'), 'GradesPage') },
     { path: '/hr/bank-masters', element: page(() => import('@/pages/hr/BankMasters'), 'BankMastersPage') },
     { path: '/hr/branches', element: page(() => import('@/pages/hr/Branches'), 'BranchesPage') },
     { path: '/hr/leave-types', element: page(() => import('@/pages/hr/LeaveTypes'), 'LeaveTypesPage') },

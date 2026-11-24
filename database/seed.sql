@@ -161,9 +161,10 @@ ON CONFLICT (id) DO UPDATE SET main_id = EXCLUDED.main_id, title = EXCLUDED.titl
 INSERT INTO core.menu_forms (id, sub_id, title, route, branch_code, display_order) VALUES
   -- HR › Masters
   (12010101, 120101, 'Designations',        '/hr/designations',            'HO', 1),
-  (12010102, 120101, 'Bank Masters',        '/hr/bank-masters',            'HO', 2),
-  (12010103, 120101, 'Leave Types',         '/hr/leave-types',             'HO', 3),
-  (12010104, 120101, 'Branches',            '/hr/branches',                'HO', 4),
+  (12010105, 120101, 'Grades',              '/hr/grades',                  'HO', 2),
+  (12010102, 120101, 'Bank Masters',        '/hr/bank-masters',            'HO', 3),
+  (12010103, 120101, 'Leave Types',         '/hr/leave-types',             'HO', 4),
+  (12010104, 120101, 'Branches',            '/hr/branches',                'HO', 5),
   -- HR › Employees
   (12010201, 120102, 'Employees',           '/hr/employees',               'HO', 1),
   (12010202, 120102, 'Service History',     '/hr/service-history',         'HO', 2),

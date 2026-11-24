@@ -1,11 +1,18 @@
 import { api } from './api';
-import type { AttendanceImportResult, AttendanceImportRow, AttendanceMonth, AttendanceStatus, LeaveType, BankMaster, BranchMaster, Designation, Employee, EmployeeListItem, Paged, ServiceHistoryRow } from '@/types/api';
+import type { AttendanceImportResult, AttendanceImportRow, AttendanceMonth, AttendanceStatus, LeaveType, BankMaster, BranchMaster, Designation, Employee, EmployeeListItem, Grade, Paged, ServiceHistoryRow } from '@/types/api';
 
 export interface DesignationInput {
   designationName: string;
   grade?: string;
   payLevel?: string;
   seniorityOrder?: number | string;
+  isActive?: boolean;
+}
+
+export interface GradeInput {
+  gradeCode: string;
+  description?: string;
+  displayOrder?: number | string;
   isActive?: boolean;
 }
 
@@ -65,6 +72,12 @@ export const hrApi = {
     create: (body: DesignationInput) => api.post<Designation>('/hr/designations', body).then((r) => r.data),
     update: (id: number, body: DesignationInput) => api.put<Designation>(`/hr/designations/${id}`, body).then((r) => r.data),
     deactivate: (id: number) => api.delete(`/hr/designations/${id}`),
+  },
+  grades: {
+    list: (params?: { active?: boolean }) => api.get<Grade[]>('/hr/grades', { params }).then((r) => r.data),
+    create: (body: GradeInput) => api.post<Grade>('/hr/grades', body).then((r) => r.data),
+    update: (id: number, body: GradeInput) => api.put<Grade>(`/hr/grades/${id}`, body).then((r) => r.data),
+    remove: (id: number) => api.delete(`/hr/grades/${id}`),
   },
   employees: {
     list: (params: EmployeeListParams) => api.get<Paged<EmployeeListItem>>('/hr/employees', { params }).then((r) => r.data),

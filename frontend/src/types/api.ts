@@ -40,6 +40,16 @@ export interface Designation {
   created_at: string;
 }
 
+export interface Grade {
+  id: number;
+  grade_code: string;
+  description: string | null;
+  display_order: number | null;
+  is_active: boolean;
+  /** Designations (active or not) whose grade matches this code. */
+  usage_count: number;
+}
+
 export interface PayrollComponent {
   id: number;
   component_name: string;
