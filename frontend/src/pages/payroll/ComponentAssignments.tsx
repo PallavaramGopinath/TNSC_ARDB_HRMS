@@ -1,7 +1,7 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createColumnHelper } from '@tanstack/react-table';
 import { Ban, Eye, Pencil, Plus, RefreshCw } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -9,24 +9,24 @@ import { DataTable } from '@/components/ui/DataTable';
 import { Field } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { Pagination } from '@/components/ui/Pagination';
 import { Select, type Option } from '@/components/ui/Select';
 import { useAuth } from '@/hooks/useAuth';
 import { formatDate, formatINR, humanize } from '@/lib/format';
+import { COMPONENT_TYPE, componentLabel, isAssignable } from '@/lib/payrollComponents';
 import { errorMessage, fieldErrors } from '@/services/api';
 import { hrApi } from '@/services/hr';
 import { payrollApi, type AssignmentInput } from '@/services/payroll';
-import type { AssignedType, ComponentAssignment, EmployeeListItem, HraCcaStatus } from '@/types/api';
+import type { AssignedType, ComponentAssignment, ComponentAssignmentDetail, EmployeeListItem, HraCcaStatus, Paged } from '@/types/api';
 
 /**
- * Payroll › Masters › Component Assignments (docs §3.1): what one employee is paid, or has deducted, under a
- * component — a fixed amount or a percentage, with effective dates. Personal Pay and Grade Pay are entered here.
+ * Payroll › Masters › Component Assignments (docs §3.1, spec 07): what one employee is paid, or has deducted, under
+ * a component — a fixed amount or a percentage, with effective dates. The employee is chosen first; their earnings
+ * and deductions are then added one by one.
  */
 const col = createColumnHelper<ComponentAssignment>();
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 200; // the most the API returns at a time
 const today = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 const statusTone: Record<HraCcaStatus, 'success' | 'brand' | 'neutral' | 'danger'> = { CURRENT: 'success', FUTURE: 'brand', EXPIRED: 'neutral', INACTIVE: 'danger' };
-const statusOptions: Option[] = [...['CURRENT', 'FUTURE', 'EXPIRED', 'INACTIVE'].map((v) => ({ value: v, label: humanize(v) })), { value: 'ALL', label: 'All' }];
 const typeOptions: Option[] = [{ value: 'FIXED', label: 'Fixed amount' }, { value: 'PERCENTAGE', label: 'Percentage' }];
 
 /** '₹500.00' or '7.5%', with the limits of a percentage if it has any. */
@@ -35,6 +35,19 @@ const limits = (r: ComponentAssignment) =>
 const value = (r: ComponentAssignment) => (r.assigned_type === 'FIXED' ? formatINR(r.assigned_amount) : `${Number(r.percentage)}%`);
 const startText = (d: string | null) => (d ? `from ${formatDate(d)}` : 'with no start date');
 
+const employeeLabel = (e: EmployeeListItem) => `${e.employee_code} — ${e.employee_name}${e.date_of_leaving ? ` (left ${formatDate(e.date_of_leaving)})` : ''}`;
+/** In force now or later. A component is assigned only once at a time, so it is not offered again meanwhile. */
+const notEnded = (r: ComponentAssignment) => r.status === 'CURRENT' || r.status === 'FUTURE';
+
+async function allPages<T>(load: (page: number) => Promise<Pick<Paged<T>, 'items' | 'total'>>): Promise<T[]> {
+  const items: T[] = [];
+  for (let page = 1; ; page++) {
+    const r = await load(page);
+    items.push(...r.items);
+    if (r.items.length === 0 || items.length >= r.total) return items;
+  }
+}
+
 type FormMode = 'add' | 'edit' | 'revise' | 'view';
 interface FormState { mode: FormMode; row?: ComponentAssignment }
 
@@ -42,22 +55,32 @@ export function ComponentAssignmentsPage() {
   const qc = useQueryClient();
   const { user } = useAuth();
   const canEdit = !!user && (user.isAdmin || user.roles.includes('Payroll'));
-  const [status, setStatus] = useState('CURRENT');
-  const [componentId, setComponentId] = useState('');
-  const [asOn, setAsOn] = useState(today());
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
+  const [employeeId, setEmployeeId] = useState('');
+  const [active, setActive] = useState(true);
   const [form, setForm] = useState<FormState | null>(null);
   const [deactivating, setDeactivating] = useState<ComponentAssignment | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const components = useQuery({ queryKey: ['payroll-components', true], queryFn: () => payrollApi.components.list({ includeInactive: true }) });
-  const params = { status, componentId: componentId || undefined, asOn: asOn || undefined, search: search || undefined, page, size: PAGE_SIZE };
-  const listQ = useQuery({ queryKey: ['component-assignments', params], queryFn: () => payrollApi.assignments.list(params), placeholderData: keepPreviousData });
+  const components = useQuery({ queryKey: ['payroll-components', false], queryFn: () => payrollApi.components.list({ includeInactive: false }) });
+  // Leavers are included: their last month is still paid.
+  const employees = useQuery({
+    queryKey: ['employee-options'],
+    queryFn: () => allPages((page) => hrApi.employees.list({ status: 'all', page, pageSize: PAGE_SIZE })),
+  });
+  const employee = employees.data?.find((e) => String(e.id) === employeeId);
+  // Everything the employee has, whatever the filter: what is already assigned must not depend on it.
+  const listQ = useQuery({
+    queryKey: ['component-assignments', employeeId],
+    queryFn: () => allPages((page) => payrollApi.assignments.list({ employeeId: Number(employeeId), status: 'ALL', page, size: PAGE_SIZE })),
+    enabled: !!employeeId,
+  });
 
-  const componentOptions = (all: boolean): Option[] =>
-    (components.data ?? []).filter((c) => all || c.is_active).map((c) => ({ value: c.id, label: `${c.component_code} — ${c.component_name}` }));
-  const filter = (set: (v: string) => void) => (v: string) => { set(v); setPage(1); };
+  const rows = useMemo(() => (listQ.data ?? []).filter((r) => r.is_active === active), [listQ.data, active]);
+  const assigned = new Set((listQ.data ?? []).filter(notEnded).map((r) => r.component_id));
+  const toAdd: Option[] = (components.data ?? [])
+    .filter((c) => isAssignable(c.component_code) && !assigned.has(c.id))
+    .map((c) => ({ value: c.id, label: componentLabel(c) }));
+  const loadError = employees.error ?? components.error ?? listQ.error;
 
   const refresh = (msg?: string) => {
     setNotice(msg ?? null);
@@ -66,24 +89,9 @@ export function ComponentAssignmentsPage() {
 
   const columns = useMemo(
     () => [
-      col.accessor('employee_name', {
-        header: 'Employee',
-        cell: (c) => (
-          <span>
-            <span className="block font-medium">{c.getValue()}</span>
-            <span className="block text-xs text-ink-500">{c.row.original.employee_code} · {c.row.original.designation_name}</span>
-          </span>
-        ),
-      }),
-      col.accessor('component_code', {
-        header: 'Component',
-        cell: (c) => (
-          <span>
-            <code className="block text-xs font-semibold">{c.getValue()}</code>
-            <span className="block text-xs text-ink-500">{c.row.original.component_name}</span>
-          </span>
-        ),
-      }),
+      col.accessor('component_code', { header: 'Code', cell: (c) => <code className="text-xs font-semibold">{c.getValue()}</code> }),
+      col.accessor('component_name', { header: 'Component' }),
+      col.accessor('component_type', { header: 'Type', cell: (c) => <Badge tone={COMPONENT_TYPE[c.getValue()][1]}>{COMPONENT_TYPE[c.getValue()][0]}</Badge> }),
       col.accessor((r) => Number(r.assigned_type === 'FIXED' ? r.assigned_amount : r.percentage), {
         id: 'value',
         header: () => <span className="block text-right">Amount or %</span>,
@@ -103,7 +111,7 @@ export function ComponentAssignmentsPage() {
         cell: (c) => {
           const r = c.row.original;
           const what = `${r.component_code} of ${r.employee_name}`;
-          const editable = canEdit && (r.status === 'CURRENT' || r.status === 'FUTURE');
+          const editable = canEdit && notEnded(r);
           return (
             <div className="flex justify-end gap-1">
               {editable ? (
@@ -127,15 +135,26 @@ export function ComponentAssignmentsPage() {
     <>
       <PageHeader
         title="Component Assignments"
-        subtitle="Amounts and percentages set per employee, such as Personal Pay and Grade Pay"
-        actions={canEdit ? <Button onClick={() => setForm({ mode: 'add' })}><Plus size={16} /> Add assignment</Button> : undefined}
+        subtitle="Earnings and deductions of an employee, added one by one"
+        actions={canEdit ? <Button disabled={!employee || !listQ.isSuccess || !components.isSuccess} onClick={() => setForm({ mode: 'add' })}><Plus size={16} /> Add assignment</Button> : undefined}
       />
 
-      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Field id="f-search" label="Search" placeholder="Employee name or code" value={search} onChange={(e) => filter(setSearch)(e.target.value)} />
-        <Select id="f-component" label="Component" placeholder="Any" options={componentOptions(true)} value={componentId} onChange={(e) => filter(setComponentId)(e.target.value)} />
-        <Select id="f-status" label="Status" placeholder="Any" options={statusOptions} value={status} onChange={(e) => filter(setStatus)(e.target.value || 'ALL')} />
-        <Field id="f-as-on" label="As on" type="date" value={asOn} onChange={(e) => filter(setAsOn)(e.target.value)} />
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-[2fr_1fr] lg:max-w-3xl">
+        <Select
+          id="f-employee"
+          label="Employee"
+          placeholder={employees.isLoading ? 'Loading…' : 'Select employee'}
+          options={(employees.data ?? []).map((e) => ({ value: e.id, label: employeeLabel(e) }))}
+          value={employeeId}
+          onChange={(e) => { setEmployeeId(e.target.value); setNotice(null); }}
+        />
+        <div>
+          <label htmlFor="f-active" className="field-label">Show</label>
+          <select id="f-active" className="field-input" value={active ? 'ACTIVE' : 'INACTIVE'} onChange={(e) => setActive(e.target.value === 'ACTIVE')}>
+            <option value="ACTIVE">Active</option>
+            <option value="INACTIVE">Inactive</option>
+          </select>
+        </div>
       </div>
 
       {notice && (
@@ -144,16 +163,24 @@ export function ComponentAssignmentsPage() {
           <button type="button" className="text-xs font-semibold" onClick={() => setNotice(null)}>Dismiss</button>
         </p>
       )}
-      {listQ.isError && <p role="alert" className="mb-3 rounded-lg bg-danger-50 px-3 py-2 text-sm text-danger-700">{errorMessage(listQ.error)}</p>}
+      {loadError && <p role="alert" className="mb-3 rounded-lg bg-danger-50 px-3 py-2 text-sm text-danger-700">{errorMessage(loadError)}</p>}
 
-      <DataTable data={listQ.data?.items ?? []} columns={columns} loading={listQ.isLoading} empty="No assignments match these filters" />
-      {!!listQ.data?.total && <Pagination page={page} pageSize={PAGE_SIZE} total={listQ.data.total} onPage={setPage} />}
+      {!employeeId ? (
+        <p className="text-sm text-ink-500">Select an employee above to view their component assignments.</p>
+      ) : (
+        <>
+          <DataTable data={rows} columns={columns} loading={listQ.isLoading} empty={active ? 'No active assignments' : 'No inactive assignments'} />
+          {listQ.isSuccess && <p className="mt-2 text-sm text-ink-500">{rows.length} {rows.length === 1 ? 'assignment' : 'assignments'}</p>}
+        </>
+      )}
 
-      {form && (
+      {form && employee && (
         <AssignmentForm
           state={form}
-          components={componentOptions(false)}
+          employee={employee}
+          toAdd={toAdd}
           onClose={() => setForm(null)}
+          onAdded={() => refresh()}
           onSaved={(warnings) => { setForm(null); refresh(warnings.length ? warnings.join(' ') : undefined); }}
         />
       )}
@@ -163,7 +190,7 @@ export function ComponentAssignmentsPage() {
 }
 
 interface FormValues {
-  employeeId: string; // set by the picker; here so that errors can be attached to it
+  employeeId: string; // not a field; here so that errors can be attached to it
   componentId: string;
   assignedType: string;
   assignedAmount: string;
@@ -176,19 +203,25 @@ interface FormValues {
 
 const num = (v: string | undefined) => (v && Number(v) !== 0 ? String(Number(v)) : '');
 
-function AssignmentForm({ state, components, onClose, onSaved }: {
+function AssignmentForm({ state, employee, toAdd, onClose, onAdded, onSaved }: {
   state: FormState;
-  components: Option[];
+  employee: EmployeeListItem;
+  /** Components the employee does not have yet. */
+  toAdd: Option[];
   onClose: () => void;
+  /** Saved, and the dialog stays open for the next one. */
+  onAdded: () => void;
   onSaved: (warnings: string[]) => void;
 }) {
   const { mode, row } = state;
-  const [employee, setEmployee] = useState<EmployeeListItem | null>(null);
+  const adding = mode === 'add';
+  const [added, setAdded] = useState<ComponentAssignmentDetail[]>([]);
+  const busy = useRef(false); // a second click can come before the buttons are redrawn as disabled
   const detail = useQuery({ queryKey: ['component-assignment', row?.id], queryFn: () => payrollApi.assignments.get(row!.id), enabled: !!row, staleTime: 0, gcTime: 0 });
   const viewOnly = mode === 'view';
   const locked = mode === 'edit' && !!detail.data?.usedInFinalisedPayroll;
 
-  const { register, handleSubmit, setError, clearErrors, watch, formState } = useForm<FormValues>({
+  const { register, handleSubmit, setError, clearErrors, setFocus, reset, watch, formState } = useForm<FormValues>({
     defaultValues: {
       employeeId: '',
       componentId: '',
@@ -197,7 +230,7 @@ function AssignmentForm({ state, components, onClose, onSaved }: {
       percentage: num(row?.percentage),
       minimumAmount: num(row?.minimum_amount),
       maximumAmount: num(row?.maximum_amount),
-      effectiveFrom: mode === 'revise' ? '' : row?.effective_from ?? '',
+      effectiveFrom: adding ? today() : mode === 'revise' ? '' : row?.effective_from ?? '',
       effectiveTo: mode === 'revise' ? '' : row?.effective_to ?? '',
     },
   });
@@ -205,40 +238,51 @@ function AssignmentForm({ state, components, onClose, onSaved }: {
   const type = watch('assignedType');
   const startRequired = mode !== 'edit' || row?.effective_from !== null;
 
+  // The list behind the dialog is read again after each save; until it arrives, leave out what was just added.
+  const justAdded = new Set(added.filter(notEnded).map((r) => r.component_id));
+  const options = toAdd.filter((o) => !justAdded.has(Number(o.value)));
+
   const save = useMutation({
-    mutationFn: ({ employeeId: _e, componentId, effectiveTo, ...v }: FormValues) => {
+    mutationFn: ({ values: { employeeId: _e, componentId, effectiveTo, ...v } }: { values: FormValues; addNext: boolean }) => {
       const terms: AssignmentInput = { ...v, assignedType: v.assignedType as AssignedType };
       if (mode === 'revise') return payrollApi.assignments.revise(row!.id, terms);
       const body = { ...terms, effectiveTo };
-      return mode === 'add' ? payrollApi.assignments.create({ ...body, employeeId: employee!.id, componentId }) : payrollApi.assignments.update(row!.id, body);
+      return adding ? payrollApi.assignments.create({ ...body, employeeId: employee.id, componentId }) : payrollApi.assignments.update(row!.id, body);
     },
-    onSuccess: (r) => onSaved(r.warnings ?? []),
+    onSuccess: (r, { values: { effectiveFrom, effectiveTo }, addNext }) => {
+      if (!addNext) return onSaved(r.warnings ?? []);
+      setAdded((list) => [...list, r]);
+      reset({ employeeId: '', componentId: '', assignedType: 'FIXED', assignedAmount: '', percentage: '', minimumAmount: '', maximumAmount: '', effectiveFrom, effectiveTo });
+      onAdded();
+    },
     onError: (e) => {
       const fe = fieldErrors(e);
       if (fe) for (const [f, m] of Object.entries(fe)) setError(f as keyof FormValues, { message: m[0] });
     },
+    onSettled: () => { busy.current = false; },
   });
+  useEffect(() => { if (adding && save.isSuccess) setFocus('componentId'); }, [adding, save.isSuccess, setFocus]);
 
-  const submit = handleSubmit((v) => {
-    if (mode === 'add' && !employee) { setError('employeeId', { message: 'Select an employee.' }); return; }
-    save.mutate(v);
-  });
+  const submit = (addNext: boolean) => {
+    clearErrors();
+    void handleSubmit((values) => {
+      if (busy.current) return;
+      busy.current = true;
+      save.mutate({ values, addNext });
+    })();
+  };
+  const close = () => { if (!save.isPending) onClose(); };
+  const nothingLeft = adding && options.length === 0 && !save.isPending;
 
   const title = { add: 'Add assignment', edit: 'Edit assignment', revise: 'Revise assignment', view: 'Assignment' }[mode];
   return (
-    <Modal open title={title} onClose={onClose}>
-      <form noValidate className="space-y-4" onSubmit={(e) => { clearErrors(); void submit(e); }}>
-        {mode === 'add' ? (
-          <>
-            <EmployeePicker value={employee} onChange={(e) => { setEmployee(e); clearErrors('employeeId'); }} error={err('employeeId')} />
-            <Select label="Component *" placeholder="Select component" options={components} {...register('componentId', { required: 'Select a component.' })} error={err('componentId')} />
-          </>
-        ) : (
-          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-            <dt className="text-ink-500">Employee</dt><dd className="font-semibold">{row?.employee_name} ({row?.employee_code})</dd>
-            <dt className="text-ink-500">Component</dt><dd className="font-semibold">{row?.component_code} — {row?.component_name}</dd>
-          </dl>
-        )}
+    <Modal open title={title} onClose={close}>
+      <form noValidate className="space-y-4" onSubmit={(e) => { e.preventDefault(); if (!nothingLeft) submit(adding); }}>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+          <dt className="text-ink-500">Employee</dt><dd className="font-semibold">{employee.employee_name} ({employee.employee_code})</dd>
+          {row && <><dt className="text-ink-500">Component</dt><dd className="font-semibold">{componentLabel(row)}</dd></>}
+        </dl>
+        {err('employeeId') && <p className="field-error">{err('employeeId')}</p>}
         {mode === 'revise' && row && (
           <p className="rounded-lg bg-brand-25 px-3 py-2 text-sm text-ink-700">
             Current: {value(row)}{limits(row) && ` (${limits(row)})`}, {startText(row.effective_from)}. It will close the day before the new effective date.
@@ -249,77 +293,73 @@ function AssignmentForm({ state, components, onClose, onSaved }: {
             This assignment has been used in a finalised payroll. Only the end date can be changed; use Revise to change the amount.
           </p>
         )}
-        <fieldset disabled={viewOnly || locked} className="grid grid-cols-2 gap-3">
-          <Select label="Type *" placeholder="Select type" options={typeOptions} {...register('assignedType', { required: 'Select fixed amount or percentage' })} error={err('assignedType')} />
-          {type === 'PERCENTAGE' ? (
-            <>
-              <Field label="Percentage *" type="number" step="0.01" min={0} max={100} {...register('percentage', { required: 'Enter a percentage' })} error={err('percentage')} />
-              <Field label="Minimum ₹ (0 = none)" type="number" step="0.01" min={0} {...register('minimumAmount')} error={err('minimumAmount')} />
-              <Field label="Maximum ₹ (0 = none)" type="number" step="0.01" min={0} {...register('maximumAmount')} error={err('maximumAmount')} />
-            </>
-          ) : (
-            <Field label="Amount ₹ per month *" type="number" step="0.01" min={0} {...register('assignedAmount', { required: 'Enter an amount' })} error={err('assignedAmount')} />
-          )}
-          <Field label={startRequired ? 'Effective from *' : 'Effective from'} type="date" {...register('effectiveFrom', { required: startRequired && 'Enter a date' })} error={err('effectiveFrom')} />
-        </fieldset>
-        {mode !== 'revise' && (
-          <fieldset disabled={viewOnly} className="grid grid-cols-2 gap-3">
-            <Field label="Effective to (optional)" type="date" {...register('effectiveTo')} error={err('effectiveTo')} />
-          </fieldset>
+        {nothingLeft ? (
+          <p className="rounded-lg bg-brand-25 px-3 py-2 text-sm text-ink-700">All components that can be assigned have been assigned to this employee.</p>
+        ) : (
+          <>
+            {adding && (
+              <fieldset disabled={save.isPending}>
+                <Select
+                  label="Component *"
+                  placeholder="Select component"
+                  options={options}
+                  hint="DA, HRA, CCA, MA, Employer PF, Bonus, Ex-Gratia, SLS and Gratuity are handled by payroll and are not assigned here."
+                  {...register('componentId', { required: 'Select a component.' })}
+                  error={err('componentId')}
+                />
+              </fieldset>
+            )}
+            <fieldset disabled={viewOnly || locked || save.isPending} className="grid grid-cols-2 gap-3">
+              <Select label="Type *" placeholder="Select type" options={typeOptions} {...register('assignedType', { required: 'Select fixed amount or percentage' })} error={err('assignedType')} />
+              {type === 'PERCENTAGE' ? (
+                <>
+                  <Field label="Percentage *" type="number" step="0.01" min={0} max={100} {...register('percentage', { required: 'Enter a percentage' })} error={err('percentage')} />
+                  <Field label="Minimum ₹ (0 = none)" type="number" step="0.01" min={0} {...register('minimumAmount')} error={err('minimumAmount')} />
+                  <Field label="Maximum ₹ (0 = none)" type="number" step="0.01" min={0} {...register('maximumAmount')} error={err('maximumAmount')} />
+                </>
+              ) : (
+                <Field label="Amount ₹ per month *" type="number" step="0.01" min={0} {...register('assignedAmount', { required: 'Enter an amount' })} error={err('assignedAmount')} />
+              )}
+              <Field label={startRequired ? 'Effective from *' : 'Effective from'} type="date" {...register('effectiveFrom', { required: startRequired && 'Enter a date' })} error={err('effectiveFrom')} />
+            </fieldset>
+            {mode !== 'revise' && (
+              <fieldset disabled={viewOnly || save.isPending} className="grid grid-cols-2 gap-3">
+                <Field label="Effective to (optional)" type="date" {...register('effectiveTo')} error={err('effectiveTo')} />
+              </fieldset>
+            )}
+          </>
         )}
         {viewOnly && row && (
           <p className="text-xs text-ink-500">Entered by {row.created_by} on {new Date(row.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</p>
         )}
         {save.isError && !fieldErrors(save.error) && <p role="alert" className="rounded-lg bg-danger-50 px-3 py-2 text-sm text-danger-700">{errorMessage(save.error)}</p>}
+        {adding && (
+          <div className="text-sm text-ink-600">
+            {added.length > 0 && (
+              <ul aria-label="Added" className="mb-2 max-h-40 divide-y divide-ink-100 overflow-y-auto rounded-lg border border-ink-200">
+                {added.map((r) => (
+                  <li key={r.id} className="px-3 py-1.5">
+                    <span className="flex justify-between gap-3"><span>{componentLabel(r)}</span><b className="whitespace-nowrap tabular-nums">{value(r)}</b></span>
+                    {r.warnings?.map((w) => <span key={w} className="block text-xs text-warning-700">{w}</span>)}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p role="status" className="text-xs text-ink-500">{added.length ? `${added.length} added` : 'None added yet'} · {options.length} remaining</p>
+          </div>
+        )}
         <div className="flex justify-end gap-2">
-          <Button variant="secondary" onClick={onClose}>{viewOnly ? 'Close' : 'Cancel'}</Button>
-          {!viewOnly && <Button type="submit" disabled={save.isPending || (mode === 'edit' && detail.isLoading)}>{save.isPending ? 'Saving…' : 'Save'}</Button>}
+          <Button variant="secondary" disabled={save.isPending} onClick={close}>{viewOnly || added.length || nothingLeft ? 'Close' : 'Cancel'}</Button>
+          {adding && !nothingLeft && (
+            <>
+              <Button variant="secondary" disabled={save.isPending} onClick={() => submit(false)}>Save</Button>
+              <Button type="submit" disabled={save.isPending}>{save.isPending ? 'Saving…' : 'Save & add next'}</Button>
+            </>
+          )}
+          {!adding && !viewOnly && <Button type="submit" disabled={save.isPending || (mode === 'edit' && detail.isLoading)}>{save.isPending ? 'Saving…' : 'Save'}</Button>}
         </div>
       </form>
     </Modal>
-  );
-}
-
-/** Find by name or code; the list is too long for a drop-down. Leavers are included: their last month is still paid. */
-function EmployeePicker({ value: chosen, onChange, error }: { value: EmployeeListItem | null; onChange: (e: EmployeeListItem | null) => void; error?: string }) {
-  const [q, setQ] = useState('');
-  const term = q.trim();
-  const found = useQuery({
-    queryKey: ['employee-picker', term],
-    queryFn: () => hrApi.employees.list({ q: term, status: 'all', pageSize: 8 }),
-    enabled: !chosen && term.length > 0,
-    placeholderData: keepPreviousData,
-  });
-
-  if (chosen)
-    return (
-      <div>
-        <span className="field-label">Employee *</span>
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-ink-200 px-3 py-2 text-sm">
-          <span><b>{chosen.employee_name}</b> <span className="text-ink-500">· {chosen.employee_code} · {chosen.designation_name}</span></span>
-          <button type="button" className="text-xs font-semibold text-brand-700" onClick={() => onChange(null)}>Change</button>
-        </div>
-        {error && <p className="field-error">{error}</p>}
-      </div>
-    );
-  return (
-    <div>
-      <Field id="employee-search" label="Employee *" placeholder="Type a name or code" autoComplete="off" autoFocus value={q} onChange={(e) => setQ(e.target.value)} error={error} />
-      {term && (
-        <ul className="mt-1 max-h-48 divide-y divide-ink-100 overflow-y-auto rounded-lg border border-ink-200 text-sm">
-          {(found.data?.items ?? []).map((e) => (
-            <li key={e.id}>
-              <button type="button" className="block w-full px-3 py-2 text-left hover:bg-brand-25" onClick={() => onChange(e)}>
-                <b>{e.employee_name}</b> <span className="text-ink-500">· {e.employee_code} · {e.designation_name}{e.date_of_leaving && ` · left ${formatDate(e.date_of_leaving)}`}</span>
-              </button>
-            </li>
-          ))}
-          {found.data?.items.length === 0 && <li className="px-3 py-2 text-ink-500">No employee found</li>}
-          {found.isError && <li className="px-3 py-2 text-danger-700">{errorMessage(found.error)}</li>}
-          {(found.data?.total ?? 0) > 8 && <li className="px-3 py-2 text-xs text-ink-500">{found.data!.total - 8} more; type more to narrow</li>}
-        </ul>
-      )}
-    </div>
   );
 }
 
