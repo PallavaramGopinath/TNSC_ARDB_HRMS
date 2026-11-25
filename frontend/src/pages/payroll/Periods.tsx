@@ -273,7 +273,7 @@ function WorkingDaysDialog({ period, onClose, onSaved }: { period: PayrollPeriod
   );
 }
 
-function LockDialog({ period, onClose, onDone }: { period: PayrollPeriod; onClose: () => void; onDone: (next: PayrollPeriod) => void }) {
+export function LockDialog({ period, onClose, onDone }: { period: PayrollPeriod; onClose: () => void; onDone: (next: PayrollPeriod) => void }) {
   const lock = useMutation({ mutationFn: () => payrollApi.periods.lockAndRoll(period.id), onSuccess: (r) => onDone(r.next) });
   return (
     <Modal open title={`Lock ${monthLabel(period)} salary?`} onClose={onClose}>

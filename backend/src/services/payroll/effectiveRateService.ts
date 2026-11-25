@@ -40,8 +40,8 @@ export function createEffectiveRateService(cfg: RateConfig) {
   const list = () => q(db, sql``, sql`order by effective_from desc, id desc`);
   const active = async () => (await q(db, sql`where is_active`, sql`order by effective_from desc limit 1`))[0];
   /** Rate in force on a date (payroll calculator / arrears): from ≤ date ≤ to (or open). */
-  const rateOn = async (date: string) =>
-    (await q(db, sql`where effective_from <= ${date} and (effective_to is null or effective_to >= ${date})`, sql`order by effective_from desc limit 1`))[0];
+  const rateOn = async (date: string, c: Tx | typeof db = db) =>
+    (await q(c, sql`where effective_from <= ${date} and (effective_to is null or effective_to >= ${date})`, sql`order by effective_from desc limit 1`))[0];
 
   async function addNewActiveRate(actor: Actor, input: { effectiveFrom: string; percentage: number }): Promise<EffectiveRate> {
     if (input.effectiveFrom > addDays(businessDate(), 366)) throw invalid('effectiveFrom', 'Effective-from is more than a year ahead; check the date');

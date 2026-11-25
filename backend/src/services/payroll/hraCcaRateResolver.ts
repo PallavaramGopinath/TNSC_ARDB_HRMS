@@ -20,21 +20,24 @@ import { AppError } from '../../lib/errors';
 import type { KeyChange } from '../../lib/money';
 import type { HraCcaBasis, HraMethod } from '../../models/db.types';
 import { hraAmountFor, intersectSegments, segmentsFor, type AllowanceRule, type AllowanceSegment } from './allowanceRules';
+import type { Conn } from './finalisedPeriods';
 import { methodOn } from './hraCcaBasisService';
 
 export interface PostedEmployee {
   id: number;
   branch_id: number;
   designation_id: number;
+  /** Days of the period in service, when not the whole of it (joined or left within it). */
+  span?: { from: string; to: string };
 }
 
 const pushTo = <V>(m: Map<number, V[]>, k: number, v: V) => void (m.get(k)?.push(v) ?? m.set(k, [v]));
 const byDate = (a: { on: string }, b: { on: string }) => (a.on < b.on ? -1 : a.on > b.on ? 1 : 0);
 
 /** Joining-dated transfers (TNCU: segments follow the joining date), oldest first. */
-async function branchChanges(employeeIds: number[]) {
+async function branchChanges(c: Conn, employeeIds: number[]) {
   const out = new Map<number, KeyChange<number>[]>();
-  const rows = await db
+  const rows = await c
     .selectFrom('hr.employee_transfers')
     .select(['employee_id', 'from_branch_id', 'to_branch_id', 'joining_date'])
     .where('employee_id', 'in', employeeIds)
@@ -48,9 +51,9 @@ async function branchChanges(employeeIds: number[]) {
 }
 
 /** Approved promotions/reversions, oldest first; the change takes effect on effect_date (else promotion_date). */
-async function designationChanges(employeeIds: number[]) {
+async function designationChanges(c: Conn, employeeIds: number[]) {
   const out = new Map<number, KeyChange<number>[]>();
-  const rows = await db
+  const rows = await c
     .selectFrom('hr.employee_promotions')
     .select(['employee_id', 'from_designation_id', 'to_designation_id', 'promotion_date', 'effect_date'])
     .where('employee_id', 'in', employeeIds)
@@ -63,8 +66,8 @@ async function designationChanges(employeeIds: number[]) {
 }
 
 /** Active percentage rows in force on a date, by basis and key. */
-async function ratesOn(asOn: string) {
-  const rows = await db
+async function ratesOn(c: Conn, asOn: string) {
+  const rows = await c
     .selectFrom('payroll.payroll_hra_cca_rates')
     .selectAll()
     .where('is_active', '=', true)
@@ -74,8 +77,8 @@ async function ratesOn(asOn: string) {
   return new Map(rows.map((r) => [`${r.rate_basis}:${r.rate_basis === 'PLACE' ? r.place_id : r.designation_id}`, r]));
 }
 
-async function hraAmountsOn(asOn: string) {
-  const rows = await db
+async function hraAmountsOn(c: Conn, asOn: string) {
+  const rows = await c
     .selectFrom('payroll.payroll_hra_amounts')
     .selectAll()
     .where('is_active', '=', true)
@@ -90,29 +93,30 @@ export interface ResolvedAllowances {
   totalDays: number;
   hra: AllowanceSegment[];
   cca: AllowanceSegment[];
-  /** Designation and branch held on the period end date. */
+  /** Designation and branch held on the last day (of service) in the period. */
   designation: string;
   branch: string;
+  branchId: number;
   place: string | null;
 }
 
 /** Rules for a pay period, for many employees at once (a fixed number of queries whatever the count). */
-export async function resolveMany(employees: PostedEmployee[], from: string, to: string): Promise<Map<number, ResolvedAllowances>> {
+export async function resolveMany(employees: PostedEmployee[], from: string, to: string, c: Conn = db): Promise<Map<number, ResolvedAllowances>> {
   const out = new Map<number, ResolvedAllowances>();
   if (!employees.length) return out;
   const ids = employees.map((e) => e.id);
   const [method, transfers, promotions, rates, amounts, branchRows, designationRows] = await Promise.all([
-    methodOn(to),
-    branchChanges(ids),
-    designationChanges(ids),
-    ratesOn(to),
-    hraAmountsOn(to),
-    db
+    methodOn(to, c),
+    branchChanges(c, ids),
+    designationChanges(c, ids),
+    ratesOn(c, to),
+    hraAmountsOn(c, to),
+    c
       .selectFrom('core.branches as b')
       .leftJoin('core.place_categories as p', 'p.id', 'b.place_id')
       .select(['b.id', 'b.name', 'b.place_id', 'p.code as place_code', 'p.name as place_name'])
       .execute(),
-    db.selectFrom('hr.employee_designations').select(['id', 'designation_name']).execute(),
+    c.selectFrom('hr.employee_designations').select(['id', 'designation_name']).execute(),
   ]);
   const branches = new Map(branchRows.map((b) => [b.id, b]));
   const designations = new Map(designationRows.map((d) => [d.id, d.designation_name]));
@@ -138,8 +142,9 @@ export async function resolveMany(employees: PostedEmployee[], from: string, to:
   };
 
   for (const e of employees) {
-    const byBranch = segmentsFor(e.branch_id, transfers.get(e.id) ?? [], from, to);
-    const byDesignation = segmentsFor(e.designation_id, promotions.get(e.id) ?? [], from, to);
+    const span = e.span ?? { from, to };
+    const byBranch = segmentsFor(e.branch_id, transfers.get(e.id) ?? [], span.from, span.to);
+    const byDesignation = segmentsFor(e.designation_id, promotions.get(e.id) ?? [], span.from, span.to);
     const last = branches.get(byBranch[byBranch.length - 1]!.key)!;
     out.set(e.id, {
       method,
@@ -148,6 +153,7 @@ export async function resolveMany(employees: PostedEmployee[], from: string, to:
       cca: byBranch.map((s) => ({ key: percentRule('CCA', 'PLACE', s.key, e.designation_id), days: s.days })),
       designation: designations.get(byDesignation[byDesignation.length - 1]!.key)!,
       branch: last.name,
+      branchId: last.id,
       place: last.place_name,
     });
   }

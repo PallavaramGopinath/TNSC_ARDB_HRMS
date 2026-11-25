@@ -58,10 +58,10 @@ export const ComponentCode = {
   IncomeTax: 'IT',
 } as const;
 
-/** Allowed period status transitions (TNCU PayrollPeriodService). No reverse from APPROVED/LOCKED. */
+/** Allowed period status transitions. APPROVED → PROCESSED is an Admin reversal before any bill is paid (spec 08 Q9). */
 export const PeriodTransitions: Record<(typeof PayrollPeriodStatus)[number], readonly (typeof PayrollPeriodStatus)[number][]> = {
   OPEN: ['PROCESSED'],
   PROCESSED: ['APPROVED', 'OPEN'],
-  APPROVED: ['LOCKED'],
+  APPROVED: ['LOCKED', 'PROCESSED'],
   LOCKED: [],
 };

@@ -27,6 +27,20 @@ import { AssignmentCreateSchema, AssignmentQuerySchema, AssignmentReviseSchema, 
 import { PfRateInputSchema } from '../models/payroll/pfRate.schema';
 import { ComponentInputSchema, ComponentQuerySchema } from '../models/payroll/component.schema';
 import { SetActiveQuerySchema } from '../models/hr/bankMaster.schema';
+import * as prep from '../controllers/payroll/preparationController';
+import {
+  ApproveRunSchema,
+  ManualDeductionSaveSchema,
+  PeriodAttendanceImportSchema,
+  PeriodAttendanceSaveSchema,
+  PeriodDeductionImportSchema,
+  PeriodDeductionSaveSchema,
+  PeriodEmployeeParamSchema,
+  PeriodParamSchema,
+  PrepareSchema,
+  ReturnSchema,
+  WithholdSchema,
+} from '../models/payroll/preparation.schema';
 import { asyncHandler as h } from '../lib/asyncHandler';
 import { requireRole } from '../middleware/authorize';
 import { Roles } from '../models/auth';
@@ -57,7 +71,8 @@ export function buildPayrollRouter(): Router {
   r.post('/component-assignments/:id/revise', write, validate(IdParamSchema, 'params'), validate(AssignmentReviseSchema), h(assignments.revise));
   r.delete('/component-assignments/:id', write, validate(IdParamSchema, 'params'), h(assignments.deactivate));
 
-  // Periods — guarded flow: no manual status transitions (Prepare/Approve move the status)
+  // Periods — guarded flow: no manual status transitions (Prepare/Approve move the status). Static paths before /:id.
+  r.post('/periods/resolve-active', write, h(prep.resolveActive));
   r.get('/periods', read, validate(PeriodQuerySchema, 'query'), h(periods.list));
   r.get('/periods/:id', read, validate(IdParamSchema, 'params'), h(periods.get));
   r.post('/periods', write, validate(PeriodInputSchema), h(periods.create));
@@ -105,10 +120,29 @@ export function buildPayrollRouter(): Router {
   r.post('/rates/hra-amounts/:id/revise', write, validate(IdParamSchema, 'params'), validate(HraAmountReviseSchema), h(hraAmounts.revise));
   r.delete('/rates/hra-amounts/:id', write, validate(IdParamSchema, 'params'), h(hraAmounts.deactivate));
 
-  // Next steps (docs §3): settings,
-  // payrolls (compute, preparation, withhold,
-  // approve-run, mark-paid), period-attendance, period-deductions, manual-deductions, readiness,
-  // reports, payslips, my-payslips, da-arrears, sls, retirement-leave-encashment, neft.
+  // Payroll Preparation — specs/08 §11.1 (read HR/Payroll, write Payroll; reversing an approval is Admin only)
+  r.post('/periods/:id/reject', write, validate(IdParamSchema, 'params'), validate(ReturnSchema), h(prep.reject));
+  r.post('/periods/:id/reverse-approval', adminOnly, validate(IdParamSchema, 'params'), validate(ReturnSchema), h(prep.reverse));
+  r.get('/readiness/:periodId', read, validate(PeriodParamSchema, 'params'), h(prep.readiness));
+  r.post('/payrolls/compute', write, validate(PrepareSchema), h(prep.prepare));
+  r.post('/payrolls/approve-run', write, validate(ApproveRunSchema), h(prep.approve));
+  r.get('/payrolls/preparation/:periodId', read, validate(PeriodParamSchema, 'params'), h(prep.grid));
+  r.get('/payrolls/:id', read, validate(IdParamSchema, 'params'), h(prep.bill));
+  r.put('/payrolls/:id/withhold', write, validate(IdParamSchema, 'params'), validate(WithholdSchema), h(prep.withhold));
+
+  r.get('/period-attendance/:periodId', read, validate(PeriodParamSchema, 'params'), h(prep.attendanceGet));
+  r.put('/period-attendance/:periodId', write, validate(PeriodParamSchema, 'params'), validate(PeriodAttendanceSaveSchema), h(prep.attendanceSave));
+  r.post('/period-attendance/:periodId/import', write, validate(PeriodParamSchema, 'params'), validate(PeriodAttendanceImportSchema), h(prep.attendanceImport));
+
+  r.get('/period-deductions/:periodId', read, validate(PeriodParamSchema, 'params'), h(prep.deductionsGet));
+  r.put('/period-deductions/:periodId', write, validate(PeriodParamSchema, 'params'), validate(PeriodDeductionSaveSchema), h(prep.deductionsSave));
+  r.post('/period-deductions/:periodId/import', write, validate(PeriodParamSchema, 'params'), validate(PeriodDeductionImportSchema), h(prep.deductionsImport));
+
+  r.get('/manual-deductions/:periodId/:employeeId', read, validate(PeriodEmployeeParamSchema, 'params'), h(prep.manualGet));
+  r.put('/manual-deductions/:periodId/:employeeId', write, validate(PeriodEmployeeParamSchema, 'params'), validate(ManualDeductionSaveSchema), h(prep.manualSave));
+
+  // Next steps (docs §3): settings, mark-paid, reports, payslips, my-payslips, da-arrears, sls,
+  // retirement-leave-encashment, neft.
   // Anything that prints employees must order by payrollPrintOrder (services/payroll/printOrder.ts).
   return r;
 }

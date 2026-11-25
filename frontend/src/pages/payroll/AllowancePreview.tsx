@@ -84,7 +84,7 @@ export function AllowancePreviewPage() {
 
   return (
     <>
-      <PageHeader title="Allowance Preview" subtitle="Basic Pay (Basic + Personal Pay + Grade Pay), DA, HRA, CCA and MA for a full month · nothing is saved" />
+      <PageHeader title="Allowance Preview" subtitle="Basic Pay (Basic + Personal Pay + Grade Pay), DA, HRA, CCA and MA before loss of pay · nothing is saved" />
 
       <div className="mb-4 flex flex-wrap items-end gap-4">
         <div className="w-64">

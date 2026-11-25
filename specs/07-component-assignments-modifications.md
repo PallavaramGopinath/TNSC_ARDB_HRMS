@@ -26,7 +26,7 @@ The screenshot showed the **Add assignment** dialog with the Component list open
 | D5 | DA, HRA, CCA and MA, which payroll calculates itself | **Left out** of the dropdown (§4.6) |
 | D6 | EMPLOYER_PF, BONUS, EX_GRATIA, SLS and GRATUITY, which are calculated or paid through their own payroll types | **Left out** of the dropdown (§4.6) |
 | D7 | Employees who have left | **Kept** in the employee dropdown, marked as left (§4.2) |
-| D8 | How PF is assigned | As today: offered, fixed amount only. To be settled with Payroll Preparation |
+| D8 | How PF is assigned | As today: offered, fixed amount only. Settled in spec 08 Q11: payroll uses the PF rate for everyone and ignores the assignment |
 | D9 | List of assignments across all employees | Not on this screen. To be provided later as a report |
 | D10 | Component with only a future-dated assignment | Stays hidden. Edit its start date, or deactivate it and add it again (§4.5) |
 

@@ -66,3 +66,8 @@ export function fieldErrors(e: unknown): Record<string, string[]> | null {
   const body = (e as AxiosError<ApiErrorBody>).response?.data?.error;
   return body?.code === 'VALIDATION' && body.details && typeof body.details === 'object' ? (body.details as Record<string, string[]>) : null;
 }
+
+/** Code and details of an API error, for the ones a screen answers itself (a confirmation, say). */
+export function apiError(e: unknown): { code: string; message: string; details?: unknown } | null {
+  return (e as AxiosError<ApiErrorBody>).response?.data?.error ?? null;
+}
