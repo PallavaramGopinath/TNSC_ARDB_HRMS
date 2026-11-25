@@ -1,7 +1,8 @@
 /**
- * HRA & CCA rates master (spec §3.2, §5.2–5.5, §6). One table serves both bases; every row says which
- * key it uses (rate_basis). New rows always take the organisation's active basis; rows of the other basis
- * stay for history and are read-only.
+ * HRA & CCA percentage rates master (specs/01 §3.2, §5.2–5.5, §6; specs/06 §12.2). One table serves both
+ * keys; every row says which one it uses (rate_basis). PLACE rows carry the CCA rates (and HRA when HRA goes
+ * by place) and are always editable. DESIGNATION rows carry HRA only and are editable only while the HRA
+ * method is DESIGNATION; otherwise they stay for history.
  *
  * Edit/deactivate are refused once a rate overlaps a finalised (APPROVED/LOCKED) payroll period — only
  * remarks stay editable and changes go through Revise. When the payroll calculator stores the applied
@@ -20,11 +21,11 @@ import type {
   HraCcaRateRevise,
   HraCcaRateUpdate,
 } from '../../models/payroll/hraCca.schema';
-import { activeBasis, coverage } from './hraCcaBasisService';
-import { basisLabel, findOverlap, periodLabel, rateStatus } from './hraCcaRules';
+import { checkBackdate, usedInFinalisedPayroll, type Conn } from './finalisedPeriods';
+import { activeMethod, coverage } from './hraCcaBasisService';
+import { basisLabel, findOverlap, isBasisInUse, methodLabel, rateStatus } from './hraCcaRules';
 
 const invalid = (field: string, msg: string) => new AppError(400, 'Validation failed', 'VALIDATION', { [field]: [msg] });
-type Conn = Tx | typeof db;
 
 const base = (c: Conn = db) =>
   c
@@ -43,31 +44,6 @@ const statusSql = (asOn: string) => sql<string>`case when not r.is_active then '
   when r.effective_from > ${asOn}::date then 'FUTURE'
   when r.effective_to is not null and r.effective_to < ${asOn}::date then 'EXPIRED' else 'CURRENT' end`;
 
-// ---------------------------------------------------------------- finalised-payroll checks
-/** A finalised (APPROVED or LOCKED) payroll period overlapping [from, to]. */
-async function finalisedPeriodOverlapping(c: Conn, from: string, to: string | null) {
-  return c
-    .selectFrom('payroll.payroll_periods')
-    .select(['id', 'month', 'calendar_year', 'from_date', 'to_date'])
-    .where('payroll_status', 'in', ['APPROVED', 'LOCKED'])
-    .where('is_active', '=', true)
-    .where('to_date', '>=', from)
-    .$if(to !== null, (q) => q.where('from_date', '<=', to!))
-    .orderBy('from_date', 'desc')
-    .executeTakeFirst();
-}
-
-const usedInFinalisedPayroll = async (c: Conn, r: { effective_from: string; effective_to: string | null }) =>
-  !!(await finalisedPeriodOverlapping(c, r.effective_from, r.effective_to));
-
-/** Effective-from inside a finalised period: refused, unless the user may back-date (Admin) → warning. */
-async function checkBackdate(c: Conn, actor: Actor, from: string): Promise<string[]> {
-  const p = await finalisedPeriodOverlapping(c, from, from);
-  if (!p) return [];
-  if (!actor.user?.isAdmin) throw invalid('effectiveFrom', `This date is in a finalised period (${periodLabel(p)}).`);
-  return [`Effective-from falls in the finalised period ${periodLabel(p)}; arrears will be needed for finalised months.`];
-}
-
 // ---------------------------------------------------------------- keys
 async function assertKey(c: Conn, basis: HraCcaBasis, keyId: number) {
   if (basis === 'PLACE') {
@@ -79,16 +55,17 @@ async function assertKey(c: Conn, basis: HraCcaBasis, keyId: number) {
   }
 }
 
-/** Key from the request body, checked against the organisation's active basis (spec §6: wrong key → 400). */
-function keyFromBody(basis: HraCcaBasis, b: { placeId?: number; designationId?: number }): number {
-  if (basis === 'PLACE') {
-    if (b.designationId != null || b.placeId == null)
-      throw invalid('placeId', 'HRA/CCA rates are applied by place of posting for this organisation; send placeId only.');
-    return b.placeId;
-  }
-  if (b.placeId != null || b.designationId == null)
-    throw invalid('designationId', 'HRA/CCA rates are applied by designation for this organisation; send designationId only.');
-  return b.designationId;
+/** Key from the request body (the schema allows exactly one). Designation rates only while they are in use. */
+async function keyFromBody(b: { placeId?: number; designationId?: number }): Promise<{ basis: HraCcaBasis; keyId: number }> {
+  if (b.placeId != null) return { basis: 'PLACE', keyId: b.placeId };
+  await assertInUse('DESIGNATION', (msg) => invalid('designationId', msg));
+  return { basis: 'DESIGNATION', keyId: b.designationId! };
+}
+
+async function assertInUse(basis: HraCcaBasis, error: (msg: string) => AppError) {
+  const method = await activeMethod();
+  if (!isBasisInUse(basis, method))
+    throw error(`This is a ${basisLabel(basis)} rate; the HRA method is now ${methodLabel(method)}. It can be viewed but not added or changed.`);
 }
 
 async function assertNoOverlap(c: Conn, basis: HraCcaBasis, keyId: number, from: string, to: string | null, exceptId?: number) {
@@ -107,8 +84,8 @@ async function assertNoOverlap(c: Conn, basis: HraCcaBasis, keyId: number, from:
 
 // ---------------------------------------------------------------- reads
 export async function list(q: HraCcaRateQuery) {
-  const active = await activeBasis();
-  const basis = q.basis ?? active;
+  const method = await activeMethod();
+  const basis = q.basis ?? (method === 'DESIGNATION' ? 'DESIGNATION' : 'PLACE');
   const asOn = q.asOn ?? businessDate();
   let query = base()
     .select(statusSql(asOn).as('status'))
@@ -130,18 +107,18 @@ export async function list(q: HraCcaRateQuery) {
     .limit(q.size)
     .offset((q.page - 1) * q.size)
     .execute();
-  return { basis, activeBasis: active, readOnly: basis !== active, asOn, page: q.page, size: q.size, total: Number(total.n), items };
+  return { basis, method, readOnly: !isBasisInUse(basis, method), asOn, page: q.page, size: q.size, total: Number(total.n), items };
 }
 
 export async function get(id: number) {
   const r = await base().where('r.id', '=', id).executeTakeFirst();
   if (!r) throw AppError.notFound('HRA/CCA rate not found');
-  const active = await activeBasis();
+  const method = await activeMethod();
   return {
     ...r,
     status: rateStatus(r, businessDate()),
     usedInFinalisedPayroll: await usedInFinalisedPayroll(db, r),
-    readOnly: r.rate_basis !== active,
+    readOnly: !isBasisInUse(r.rate_basis, method),
   };
 }
 
@@ -160,7 +137,7 @@ export async function affectedEmployees(q: { placeId?: number; designationId?: n
 }
 
 export async function missing(asOn?: string) {
-  return coverage(await activeBasis(), asOn ?? businessDate());
+  return coverage(await activeMethod(), asOn ?? businessDate());
 }
 
 // ---------------------------------------------------------------- writes
@@ -199,20 +176,17 @@ async function insertRate(
   return row.id;
 }
 
-/** Load a row for change: must exist, be active, and belong to the active basis. */
+/** Load a row for change: must exist, be active, and be in use under the HRA method. */
 async function lockEditable(trx: Tx, id: number, action: string) {
   const r = await base(trx).where('r.id', '=', id).forUpdate('r').executeTakeFirst();
   if (!r) throw AppError.notFound('HRA/CCA rate not found');
   if (!r.is_active) throw AppError.conflict(`This rate is inactive and cannot be ${action}.`);
-  const active = await activeBasis();
-  if (r.rate_basis !== active)
-    throw AppError.conflict(`This is a ${basisLabel(r.rate_basis)} rate; the organisation now uses ${basisLabel(active)}. It can be viewed but not ${action}.`);
+  await assertInUse(r.rate_basis, AppError.conflict);
   return r;
 }
 
 export async function create(actor: Actor, i: HraCcaRateCreate) {
-  const basis = await activeBasis();
-  const keyId = keyFromBody(basis, i);
+  const { basis, keyId } = await keyFromBody(i);
   const { id, warnings } = await withAudit(actor, async (trx) => {
     await assertKey(trx, basis, keyId);
     const warnings = await checkBackdate(trx, actor, i.effectiveFrom);
@@ -281,7 +255,8 @@ export async function revise(actor: Actor, id: number, i: HraCcaRateRevise) {
  * the key has none). All or nothing.
  */
 export async function bulkRevise(actor: Actor, i: HraCcaBulkRevise) {
-  const basis = await activeBasis();
+  const { basis } = i;
+  await assertInUse(basis, AppError.conflict);
   const keyCol = basis === 'PLACE' ? ('r.place_id' as const) : ('r.designation_id' as const);
   const result = await withAudit(actor, async (trx) => {
     const warnings = await checkBackdate(trx, actor, i.effectiveFrom);

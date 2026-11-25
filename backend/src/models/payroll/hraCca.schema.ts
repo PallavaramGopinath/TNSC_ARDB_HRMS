@@ -24,6 +24,8 @@ const optId = z.preprocess((v) => (v === '' || v === null ? undefined : v), z.co
 
 export const HraCcaBasisSchema = z.enum(['PLACE', 'DESIGNATION'], { errorMap: () => ({ message: 'Choose PLACE or DESIGNATION' }) });
 
+export const HraMethodSchema = z.enum(['PLACE', 'DESIGNATION', 'FIXED_AMOUNT'], { errorMap: () => ({ message: 'Choose PLACE, DESIGNATION or FIXED_AMOUNT' }) });
+
 /** The values every rate row carries (create, edit, revise, bulk item). */
 const rateValues = {
   hraPercent: percent,
@@ -47,7 +49,7 @@ const checkRange = (v: { effectiveFrom: string; effectiveTo?: string | null }, c
     ctx.addIssue({ code: 'custom', path: ['effectiveTo'], message: 'End date must be on or after start date.' });
 };
 
-/** Create: exactly one key; which one must match the active basis (checked in the service → 400). */
+/** Create: exactly one key. A designation is accepted only while HRA goes by designation (service → 400). */
 export const HraCcaRateCreateSchema = z
   .object({
     placeId: optId,
@@ -80,6 +82,7 @@ export const HraCcaRateReviseSchema = z
 export type HraCcaRateRevise = z.infer<typeof HraCcaRateReviseSchema>;
 
 export const HraCcaBulkReviseSchema = z.object({
+  basis: HraCcaBasisSchema,
   effectiveFrom: date,
   remarks: rateValues.remarks,
   items: z
@@ -104,7 +107,7 @@ export const HraCcaRateQuerySchema = z.object({
 export type HraCcaRateQuery = z.infer<typeof HraCcaRateQuerySchema>;
 
 export const AsOnQuerySchema = z.object({ asOn: date.optional() });
-export const CoverageQuerySchema = z.object({ basis: HraCcaBasisSchema, asOn: date.optional() });
+export const CoverageQuerySchema = z.object({ method: HraMethodSchema, asOn: date.optional() });
 export const AffectedQuerySchema = z.object({ placeId: optId, designationId: optId });
 export const ResolveQuerySchema = z.object({ employeeId: z.coerce.number().int().positive(), asOn: date.optional() });
-export const BasisChangeSchema = z.object({ basis: HraCcaBasisSchema });
+export const BasisChangeSchema = z.object({ method: HraMethodSchema });

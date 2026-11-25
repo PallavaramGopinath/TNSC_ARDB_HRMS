@@ -361,7 +361,10 @@ export interface PayrollPfDeductionRateTable {
   approved_at: Timestamp | null;
 }
 
+/** Key of a percentage rate row. */
 export type HraCcaBasis = 'PLACE' | 'DESIGNATION';
+/** How HRA is worked out (setting payroll.hra_cca.basis): a percentage row, or payroll_hra_amounts. */
+export type HraMethod = HraCcaBasis | 'FIXED_AMOUNT';
 
 export interface PayrollHraCcaRateTable {
   id: Generated<number>;
@@ -382,6 +385,33 @@ export interface PayrollHraCcaRateTable {
   created_at: Generated<Timestamp>;
   updated_by: string | null;
   updated_at: Timestamp | null;
+}
+
+export interface PayrollHraAmountTable {
+  id: Generated<number>;
+  designation_id: number;
+  gcc_amount: Numeric;
+  other_amount: Numeric;
+  effective_from: DateStr;
+  effective_to: DateStr | null;
+  remarks: string | null;
+  is_active: Generated<boolean>;
+  created_by: string;
+  created_at: Generated<Timestamp>;
+  updated_by: string | null;
+  updated_at: Timestamp | null;
+}
+
+export interface PayrollComponentAssignmentTable {
+  id: Generated<number>;
+  employee_id: number;
+  component_id: number;
+  assigned_type: 'FIXED' | 'PERCENTAGE';
+  assigned_amount: Numeric;
+  effective_from: DateStr | null;
+  effective_to: DateStr | null;
+  is_active: Generated<boolean>;
+  created_by: string;
 }
 
 export interface PayrollPeriodTable {
@@ -480,6 +510,8 @@ export interface Database {
   'payroll.payroll_da_rates': PayrollDaRateTable;
   'payroll.payroll_pf_deduction_rates': PayrollPfDeductionRateTable;
   'payroll.payroll_hra_cca_rates': PayrollHraCcaRateTable;
+  'payroll.payroll_hra_amounts': PayrollHraAmountTable;
+  'payroll.payroll_component_assignments': PayrollComponentAssignmentTable;
   'payroll.payrolls': PayrollTable;
 }
 

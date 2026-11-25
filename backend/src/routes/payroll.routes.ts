@@ -20,6 +20,8 @@ import {
   HraCcaRateUpdateSchema,
   ResolveQuerySchema,
 } from '../models/payroll/hraCca.schema';
+import * as hraAmounts from '../controllers/payroll/hraAmountController';
+import { HraAmountCreateSchema, HraAmountQuerySchema, HraAmountReviseSchema, HraAmountUpdateSchema } from '../models/payroll/hraAmount.schema';
 import { PfRateInputSchema } from '../models/payroll/pfRate.schema';
 import { ComponentInputSchema, ComponentQuerySchema } from '../models/payroll/component.schema';
 import { SetActiveQuerySchema } from '../models/hr/bankMaster.schema';
@@ -54,6 +56,9 @@ export function buildPayrollRouter(): Router {
   r.put('/periods/:id/working-days', write, validate(IdParamSchema, 'params'), validate(WorkingDaysSchema), h(periods.workingDays));
   r.post('/periods/:id/lock-and-roll', write, validate(IdParamSchema, 'params'), h(periods.lockAndRoll));
 
+  // Allowance preview (DA, HRA, CCA, MA) — specs/06; read-only
+  r.get('/periods/:id/allowances', read, validate(IdParamSchema, 'params'), h(periods.allowances));
+
   // DA rates — read Admin/HR/Payroll, add Admin/Payroll (TNCU PayrollDaRatesController)
   r.get('/rates/da', read, h(daRates.list));
   r.get('/rates/da/active', read, h(daRates.active));
@@ -64,7 +69,7 @@ export function buildPayrollRouter(): Router {
   r.get('/rates/pf/active', read, h(pfRates.active));
   r.post('/rates/pf', write, validate(PfRateInputSchema), h(pfRates.create));
 
-  // HRA & CCA calculation basis — specs/01 §6 (read HR/Payroll, change Admin only)
+  // HRA method — specs/01 §6, specs/06 §12 (read HR/Payroll, change Admin only)
   r.get('/settings/hra-cca-basis', read, h(hraCca.basisStatus));
   r.put('/settings/hra-cca-basis', adminOnly, validate(BasisChangeSchema), h(hraCca.basisChange));
   r.get('/settings/hra-cca-basis/coverage', read, validate(CoverageQuerySchema, 'query'), h(hraCca.basisCoverage));
@@ -80,6 +85,15 @@ export function buildPayrollRouter(): Router {
   r.put('/rates/hra-cca/:id', write, validate(IdParamSchema, 'params'), validate(HraCcaRateUpdateSchema), h(hraCca.update));
   r.post('/rates/hra-cca/:id/revise', write, validate(IdParamSchema, 'params'), validate(HraCcaRateReviseSchema), h(hraCca.revise));
   r.delete('/rates/hra-cca/:id', write, validate(IdParamSchema, 'params'), h(hraCca.deactivate));
+
+  // Fixed HRA amounts — specs/06 §12.1 (read HR/Payroll, write Payroll). Static paths before /:id.
+  r.get('/rates/hra-amounts', read, validate(HraAmountQuerySchema, 'query'), h(hraAmounts.list));
+  r.get('/rates/hra-amounts/missing', read, validate(AsOnQuerySchema, 'query'), h(hraAmounts.missing));
+  r.post('/rates/hra-amounts', write, validate(HraAmountCreateSchema), h(hraAmounts.create));
+  r.get('/rates/hra-amounts/:id', read, validate(IdParamSchema, 'params'), h(hraAmounts.get));
+  r.put('/rates/hra-amounts/:id', write, validate(IdParamSchema, 'params'), validate(HraAmountUpdateSchema), h(hraAmounts.update));
+  r.post('/rates/hra-amounts/:id/revise', write, validate(IdParamSchema, 'params'), validate(HraAmountReviseSchema), h(hraAmounts.revise));
+  r.delete('/rates/hra-amounts/:id', write, validate(IdParamSchema, 'params'), h(hraAmounts.deactivate));
 
   // Next steps (docs §3): component-assignments, settings,
   // payrolls (compute, preparation, withhold,

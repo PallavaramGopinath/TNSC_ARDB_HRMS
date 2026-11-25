@@ -23,7 +23,8 @@ difference is called out as **ARDB decision**.
 | D9 | **Hard-coded rule values move into `core.app_settings`:** increment cycle, PF rate defaults, leave-credit constants, caps and similar. |
 | D10 | **Loans and sundry-debtor recovery are out of scope**, because they depend on TNCU's Loans and Accounts modules. Component type 3 (LoanDeductions) is kept, and amounts come from the monthly period-deduction upload. |
 | D12 | **No Party (KYC) Master** (decided 2026-11-06, migration 0002). The KYC and bank fields (name, Tamil name, gender, contact, address, PAN, Aadhaar, bank, bank branch, account no., IFSC) live on `hr.employees`. The employee code is generated per employee as `hr.employee_code_prefix` followed by a number zero-padded to `hr.employee_code_pad` digits (EMP001). Auto-creating a self-service login on create is deferred to the My Payslips step. |
-| D13 | **HRA/CCA calculation basis is configurable** (decided 2026-11-07, migration 0003, [spec 01](../specs/01-hra-cca-rates-calculation-basis.md)). Setting `payroll.hra_cca.basis` chooses PLACE (TNCU: branch's place category) or DESIGNATION (TNSC ARDB). One basis drives both HRA and CCA. Rates of the inactive basis are kept read-only. |
+| D13 | **HRA/CCA calculation basis is configurable** (decided 2026-11-07, migration 0003, [spec 01](../specs/01-hra-cca-rates-calculation-basis.md)). Setting `payroll.hra_cca.basis` chooses PLACE (TNCU: branch's place category) or DESIGNATION (TNSC ARDB). Rates not in use are kept read-only. **Changed by D14:** it now decides HRA only. |
+| D14 | **TNCSARDB allowances** (decided 2026-11-25, migration 0006, [spec 06](../specs/06-allowance-calculation-da-hra-cca-ma.md)). Basic Pay for DA, HRA % and CCA is BASIC + PP + GP (SP excluded). HRA method `FIXED_AMOUNT` pays a fixed amount by designation and place (`payroll.payroll_hra_amounts`). CCA always goes by place. MA is the setting `payroll.medical_allowance.amount`. |
 | D11 | **Paying without accounts:** an APPROVED bill becomes PAID through "Mark Paid" (in bulk or per bill), and an NEFT file is exported. Lock & Roll still requires every approved, non-withheld bill to be PAID. |
 
 ---
@@ -210,7 +211,7 @@ Append-only. Columns: effective_date, branch, designation, basic_pay, and servic
 ### 3.3 Calculator (`PayrollCalculator.cs`, ported exactly)
 D is the number of calendar days in the period. `RoundRupee` rounds half-up.
 
-1. **Basic, GP and SP:** taken from the latest APPROVED, non-WITHHELD increment on or before the period's end date, otherwise from the FIXED assignment. Basic finally falls back to employees.basic_salary. A mid-month change is blended: `RoundRupee((old*daysBefore + new*daysOnAfter)/D)`. `payBase = Basic + GP + SP` (PP is excluded).
+1. **Basic, GP and SP:** taken from the latest APPROVED, non-WITHHELD increment on or before the period's end date, otherwise from the FIXED assignment. Basic finally falls back to employees.basic_salary. A mid-month change is blended: `RoundRupee((old*daysBefore + new*daysOnAfter)/D)`. `payBase = Basic + GP + SP` (PP is excluded). **ARDB (D14):** for DA, HRA and CCA, Basic Pay = Basic + PP + GP; whether PF and VPF follow is open.
 2. **Leave proration:**
    - `basicGrpUnpaid = clamp(Σ days × pay_cut_factor, 0, D)`.
    - `spDaUnpaid` is the same sum, counting only leave types that cut SP and DA.
@@ -218,9 +219,9 @@ D is the number of calendar days in the period. `RoundRupee` rounds half-up.
    - Basic, PP and GP are prorated by basicGrpUnpaid; SP by spDaUnpaid.
    - `payable_days = D − basicGrpUnpaid`.
 3. **DA:** `Pro(RoundRupee(payBase*da%/100), spDaUnpaid)`. The rate is the latest active rate in effect on the period's end date, falling back to `period.da_rate`.
-4. **HRA and CCA:** the month is split into per-branch day segments using transfer joining dates. Each segment pays
+4. **HRA and CCA** (**ARDB D14:** HRA may be a fixed amount by designation and place)**:** the month is split into per-branch day segments using transfer joining dates. Each segment pays
    `Clamp(RoundRupee(payBase*pct/100*days/D), RoundRupee(min*days/D), RoundRupee(max*days/D))`, where max 0 means no cap. CCA is paid only when its percentage is non-zero. Neither is LOP-prorated.
-5. **MA and other earnings:** FIXED amount, or `RoundRupee(payBase*pct/100)`.
+5. **MA and other earnings** (**ARDB D14:** MA is one amount for everyone)**:** FIXED amount, or `RoundRupee(payBase*pct/100)`.
 6. **PF:** `RoundRupee((basicPaid+gpPaid+spPaid+daPaid)*pf%/100)`, with no ceiling. EMPLOYER_PF is a single line where allowance = deduction = PF.
 7. **VPF (`ADL PF`):** read on payBase.
 8. **Other deductions:** the period-uploaded amount, otherwise the assigned amount (any percentage type is ignored).

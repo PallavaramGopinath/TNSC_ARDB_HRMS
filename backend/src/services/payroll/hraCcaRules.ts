@@ -1,15 +1,23 @@
 /**
- * Pure rules for HRA/CCA rates and the calculation basis (specs/01-hra-cca-rates-calculation-basis.md).
+ * Pure rules for HRA/CCA rates and the calculation basis (specs/01-hra-cca-rates-calculation-basis.md),
+ * and the HRA method that replaced the single basis (specs/06 §12): the method decides HRA only; CCA always
+ * goes by place.
  * No database access here, so every rule is unit-tested in tests/hraCcaRules.test.ts.
  */
 import { addDays, monthBounds } from '../../lib/dates';
 import type { KeyChange } from '../../lib/money';
-import type { HraCcaBasis } from '../../models/db.types';
+import type { HraCcaBasis, HraMethod } from '../../models/db.types';
 
 export const HRA_CCA_BASIS_KEY = 'payroll.hra_cca.basis';
 export const HraCcaBases = ['PLACE', 'DESIGNATION'] as const satisfies readonly HraCcaBasis[];
 export const basisLabel = (b: HraCcaBasis) => (b === 'PLACE' ? 'Place of posting' : 'Designation');
-export const parseBasis = (v: unknown): HraCcaBasis => (v === 'DESIGNATION' ? 'DESIGNATION' : 'PLACE');
+
+export const HraMethods = [...HraCcaBases, 'FIXED_AMOUNT'] as const satisfies readonly HraMethod[];
+export const methodLabel = (m: HraMethod) => (m === 'FIXED_AMOUNT' ? 'Fixed amount by designation and place' : basisLabel(m));
+export const parseMethod = (v: unknown): HraMethod => HraMethods.find((m) => m === v) ?? 'PLACE';
+
+/** PLACE rows always carry the CCA rates; DESIGNATION rows matter only while HRA goes by designation. */
+export const isBasisInUse = (basis: HraCcaBasis, method: HraMethod) => basis === 'PLACE' || basis === method;
 
 export type RateStatus = 'CURRENT' | 'FUTURE' | 'EXPIRED' | 'INACTIVE';
 
@@ -58,7 +66,7 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 export const periodLabel = (p: { month: number; calendar_year: number }) => `${MONTHS[p.month - 1]} ${p.calendar_year}`;
 
 /**
- * When can the basis change, and from which date (spec §4.4)?
+ * When can the HRA method change, and from which date (spec §4.4)?
  *  - Blocked while any period that is not LOCKED already has pay bills (an open, unfinalised payroll run).
  *    An OPEN period with no bills does not block: Lock & Roll always leaves the next month open.
  *  - Takes effect from the earliest SALARY period not yet LOCKED; else the day after the last LOCKED
@@ -81,7 +89,7 @@ export function basisChangeWindow(periods: PeriodState[], today: string): { canC
   const blocker = open[0];
   return {
     canChange: !blocker,
-    blockedReason: blocker ? `Finalise or cancel the open payroll for ${periodLabel(blocker)} before changing the basis.` : null,
+    blockedReason: blocker ? `Finalise or cancel the open payroll for ${periodLabel(blocker)} before changing the HRA method.` : null,
     effectiveFrom,
   };
 }

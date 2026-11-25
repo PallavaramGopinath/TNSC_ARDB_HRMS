@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HraCcaBulkReviseSchema, HraCcaRateCreateSchema, HraCcaRateQuerySchema, HraCcaRateUpdateSchema } from '../src/models/payroll/hraCca.schema';
+import { BasisChangeSchema, HraCcaBulkReviseSchema, HraCcaRateCreateSchema, HraCcaRateQuerySchema, HraCcaRateUpdateSchema } from '../src/models/payroll/hraCca.schema';
 
 const ok = { designationId: 4, effectiveFrom: '2026-04-01', hraPercent: '8', ccaPercent: '3' };
 
@@ -32,10 +32,12 @@ describe('HraCcaRateUpdateSchema', () => {
 });
 
 describe('HraCcaBulkReviseSchema (spec §5.5)', () => {
-  it('needs at least one item', () => expect(HraCcaBulkReviseSchema.safeParse({ effectiveFrom: '2027-04-01', items: [] }).success).toBe(false));
+  it('needs at least one item', () => expect(HraCcaBulkReviseSchema.safeParse({ basis: 'PLACE', effectiveFrom: '2027-04-01', items: [] }).success).toBe(false));
+  it('needs the basis the keys belong to', () =>
+    expect(HraCcaBulkReviseSchema.safeParse({ effectiveFrom: '2027-04-01', items: [{ keyId: 1, hraPercent: 9, ccaPercent: 3 }] }).success).toBe(false));
   it('validates each item', () => {
-    expect(HraCcaBulkReviseSchema.safeParse({ effectiveFrom: '2027-04-01', items: [{ keyId: 1, hraPercent: 9, ccaPercent: 3 }] }).success).toBe(true);
-    expect(HraCcaBulkReviseSchema.safeParse({ effectiveFrom: '2027-04-01', items: [{ keyId: 1, hraPercent: 101, ccaPercent: 3 }] }).success).toBe(false);
+    expect(HraCcaBulkReviseSchema.safeParse({ basis: 'PLACE', effectiveFrom: '2027-04-01', items: [{ keyId: 1, hraPercent: 9, ccaPercent: 3 }] }).success).toBe(true);
+    expect(HraCcaBulkReviseSchema.safeParse({ basis: 'PLACE', effectiveFrom: '2027-04-01', items: [{ keyId: 1, hraPercent: 101, ccaPercent: 3 }] }).success).toBe(false);
   });
 });
 
@@ -43,4 +45,9 @@ describe('HraCcaRateQuerySchema', () => {
   it('defaults paging and coerces ids', () =>
     expect(HraCcaRateQuerySchema.parse({ designationId: '3' })).toMatchObject({ designationId: 3, page: 1, size: 25 }));
   it('rejects an unknown basis', () => expect(HraCcaRateQuerySchema.safeParse({ basis: 'BRANCH' }).success).toBe(false));
+});
+
+describe('BasisChangeSchema (HRA method, spec 06 §12)', () => {
+  it.each(['PLACE', 'DESIGNATION', 'FIXED_AMOUNT'])('accepts %s', (method) => expect(BasisChangeSchema.safeParse({ method }).success).toBe(true));
+  it('rejects anything else', () => expect(BasisChangeSchema.safeParse({ method: 'FIXED' }).success).toBe(false));
 });

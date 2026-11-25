@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { keyDaySegments } from '../src/lib/money';
-import { basisChangeWindow, findOverlap, keyAsOn, parseBasis, rateStatus, type PeriodState } from '../src/services/payroll/hraCcaRules';
+import { basisChangeWindow, findOverlap, keyAsOn, isBasisInUse, parseMethod, rateStatus, type PeriodState } from '../src/services/payroll/hraCcaRules';
 
 describe('rateStatus (spec §5.2)', () => {
   const r = (from: string, to: string | null, active = true) => ({ is_active: active, effective_from: from, effective_to: to });
@@ -67,7 +67,7 @@ describe('basisChangeWindow (spec §4.4, test 6)', () => {
   it('is blocked while a period has bills and is not locked', () => {
     const w = basisChangeWindow([p(10, 'LOCKED', 40), p(11, 'PROCESSED', 40)], '2026-11-07');
     expect(w.canChange).toBe(false);
-    expect(w.blockedReason).toBe('Finalise or cancel the open payroll for Nov 2026 before changing the basis.');
+    expect(w.blockedReason).toBe('Finalise or cancel the open payroll for Nov 2026 before changing the HRA method.');
   });
   it('is blocked by an approved but unlocked arrears run too', () =>
     expect(basisChangeWindow([p(10, 'LOCKED', 40), p(11, 'OPEN', 0), p(9, 'APPROVED', 5, 'DA_ARREARS')], '2026-11-07').canChange).toBe(false));
@@ -77,10 +77,17 @@ describe('basisChangeWindow (spec §4.4, test 6)', () => {
     expect(basisChangeWindow([], '2026-11-07').effectiveFrom).toBe('2026-11-01'));
 });
 
-describe('parseBasis', () => {
+describe('HRA method (spec 06 §12)', () => {
   it('defaults anything unknown to PLACE', () => {
-    expect(parseBasis('DESIGNATION')).toBe('DESIGNATION');
-    expect(parseBasis(undefined)).toBe('PLACE');
-    expect(parseBasis('designation')).toBe('PLACE');
+    expect(parseMethod('DESIGNATION')).toBe('DESIGNATION');
+    expect(parseMethod('FIXED_AMOUNT')).toBe('FIXED_AMOUNT');
+    expect(parseMethod(undefined)).toBe('PLACE');
+    expect(parseMethod('designation')).toBe('PLACE');
+  });
+  it('keeps place rows in use under every method, for CCA', () => {
+    for (const m of ['PLACE', 'DESIGNATION', 'FIXED_AMOUNT'] as const) expect(isBasisInUse('PLACE', m)).toBe(true);
+    expect(isBasisInUse('DESIGNATION', 'DESIGNATION')).toBe(true);
+    expect(isBasisInUse('DESIGNATION', 'PLACE')).toBe(false);
+    expect(isBasisInUse('DESIGNATION', 'FIXED_AMOUNT')).toBe(false);
   });
 });
