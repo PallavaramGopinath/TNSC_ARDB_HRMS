@@ -269,7 +269,10 @@ export interface PayrollPeriod {
 }
 
 // ---------------------------------------------------------------- HRA & CCA rates (specs/01)
+/** Key of a percentage rate row. */
 export type HraCcaBasis = 'PLACE' | 'DESIGNATION';
+/** How HRA is worked out. CCA always goes by place. */
+export type HraMethod = HraCcaBasis | 'FIXED_AMOUNT';
 export type HraCcaStatus = 'CURRENT' | 'FUTURE' | 'EXPIRED' | 'INACTIVE';
 
 export interface HraCcaRate {
@@ -303,7 +306,7 @@ export interface HraCcaRateDetail extends HraCcaRate {
 
 export interface HraCcaRateList {
   basis: HraCcaBasis;
-  activeBasis: HraCcaBasis;
+  method: HraMethod;
   readOnly: boolean;
   asOn: string;
   page: number;
@@ -313,22 +316,82 @@ export interface HraCcaRateList {
 }
 
 export interface HraCcaBasisStatus {
-  basis: HraCcaBasis;
-  basisFrom: string | null;
-  todayBasis: HraCcaBasis;
+  method: HraMethod;
+  methodFrom: string | null;
+  todayMethod: HraMethod;
   effectiveFrom: string;
   canChange: boolean;
   blockedReason: string | null;
-  rateCounts: Record<HraCcaBasis, number>;
+  rateCounts: Record<HraMethod, number>;
   lastChangedBy: string | null;
   lastChangedAt: string | null;
 }
 
-export interface HraCcaCoverage {
-  basis: HraCcaBasis;
-  asOn: string;
+export interface RateCoverage {
   keysWithEmployees: number;
   missing: Array<{ keyId: number | null; keyName: string; employeeCount: number }>;
+}
+export interface HraCcaCoverage {
+  method: HraMethod;
+  asOn: string;
+  hra: RateCoverage;
+  cca: RateCoverage;
+}
+
+export interface HraAmount {
+  id: number;
+  designation_id: number;
+  designation_name: string;
+  gcc_amount: string;
+  other_amount: string;
+  effective_from: string;
+  effective_to: string | null;
+  remarks: string | null;
+  is_active: boolean;
+  created_by: string;
+  created_at: string;
+  updated_by: string | null;
+  updated_at: string | null;
+  status: HraCcaStatus;
+}
+export interface HraAmountDetail extends HraAmount {
+  usedInFinalisedPayroll: boolean;
+  warnings?: string[];
+}
+
+export interface AllowanceIssue {
+  code: 'BASIC_PAY' | 'DA_RATE' | 'HRA' | 'CCA' | 'MA' | 'PART_MONTH';
+  severity: 'ERROR' | 'WARNING';
+  message: string;
+}
+/** Amounts are null while something they need is missing. */
+export interface AllowancePreviewRow {
+  employeeId: number;
+  employeeCode: string | null;
+  employeeName: string;
+  designation: string;
+  branch: string;
+  place: string | null;
+  basic: string;
+  pp: string;
+  gp: string;
+  basicPay: string;
+  da: string | null;
+  hra: string | null;
+  cca: string | null;
+  ma: string | null;
+  total: string | null;
+  issues: AllowanceIssue[];
+}
+export interface AllowancePreview {
+  period: { id: number; month: number; calendarYear: number; fromDate: string; toDate: string; status: string };
+  method: HraMethod;
+  daRate: { id: number; percentage: string; effectiveFrom: string } | null;
+  medicalAmount: string | null;
+  employeeCount: number;
+  employeesWithErrors: number;
+  ready: boolean;
+  employees: AllowancePreviewRow[];
 }
 
 // ---------------------------------------------------------------- HR › Attendance

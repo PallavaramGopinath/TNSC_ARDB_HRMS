@@ -1,11 +1,16 @@
 import { api } from './api';
 import type {
+  AllowancePreview,
   EffectiveRate,
+  HraAmount,
+  HraAmountDetail,
   HraCcaBasis,
   HraCcaBasisStatus,
   HraCcaCoverage,
   HraCcaRateDetail,
   HraCcaRateList,
+  HraMethod,
+  RateCoverage,
   PayrollComponent,
   PayrollPeriod,
 } from '@/types/api';
@@ -49,9 +54,9 @@ export const payrollApi = {
   pfRates: rateApi('pf', 'pfPercentage'),
   hraCcaBasis: {
     status: () => api.get<HraCcaBasisStatus>('/payroll/settings/hra-cca-basis').then((r) => r.data),
-    change: (basis: HraCcaBasis) => api.put<HraCcaBasisStatus>('/payroll/settings/hra-cca-basis', { basis }).then((r) => r.data),
-    coverage: (basis: HraCcaBasis, asOn?: string) =>
-      api.get<HraCcaCoverage>('/payroll/settings/hra-cca-basis/coverage', { params: { basis, asOn } }).then((r) => r.data),
+    change: (method: HraMethod) => api.put<HraCcaBasisStatus>('/payroll/settings/hra-cca-basis', { method }).then((r) => r.data),
+    coverage: (method: HraMethod, asOn?: string) =>
+      api.get<HraCcaCoverage>('/payroll/settings/hra-cca-basis/coverage', { params: { method, asOn } }).then((r) => r.data),
   },
   hraCca: {
     list: (params: HraCcaListParams) => api.get<HraCcaRateList>('/payroll/rates/hra-cca', { params }).then((r) => r.data),
@@ -60,14 +65,25 @@ export const payrollApi = {
       api.post<HraCcaRateDetail>('/payroll/rates/hra-cca', body).then((r) => r.data),
     update: (id: number, body: HraCcaRateInput) => api.put<HraCcaRateDetail>(`/payroll/rates/hra-cca/${id}`, body).then((r) => r.data),
     revise: (id: number, body: HraCcaRateInput) => api.post<HraCcaRateDetail>(`/payroll/rates/hra-cca/${id}/revise`, body).then((r) => r.data),
-    bulkRevise: (body: { effectiveFrom: string; remarks?: string; items: Array<HraCcaRateValues & { keyId: number }> }) =>
+    bulkRevise: (body: { basis: HraCcaBasis; effectiveFrom: string; remarks?: string; items: Array<HraCcaRateValues & { keyId: number }> }) =>
       api.post<{ count: number; warnings: string[] }>('/payroll/rates/hra-cca/bulk-revise', body).then((r) => r.data),
     deactivate: (id: number) => api.delete(`/payroll/rates/hra-cca/${id}`),
     missing: (asOn?: string) => api.get<HraCcaCoverage>('/payroll/rates/hra-cca/missing', { params: { asOn } }).then((r) => r.data),
     affected: (params: { placeId?: number; designationId?: number }) =>
       api.get<{ count: number }>('/payroll/rates/hra-cca/affected', { params }).then((r) => r.data),
   },
+  hraAmounts: {
+    list: (params: { designationId?: number; status?: string; asOn?: string; search?: string }) =>
+      api.get<{ asOn: string; items: HraAmount[] }>('/payroll/rates/hra-amounts', { params }).then((r) => r.data),
+    get: (id: number) => api.get<HraAmountDetail>(`/payroll/rates/hra-amounts/${id}`).then((r) => r.data),
+    create: (body: HraAmountInput & { designationId: number | string }) => api.post<HraAmountDetail>('/payroll/rates/hra-amounts', body).then((r) => r.data),
+    update: (id: number, body: HraAmountInput) => api.put<HraAmountDetail>(`/payroll/rates/hra-amounts/${id}`, body).then((r) => r.data),
+    revise: (id: number, body: HraAmountInput) => api.post<HraAmountDetail>(`/payroll/rates/hra-amounts/${id}/revise`, body).then((r) => r.data),
+    deactivate: (id: number) => api.delete(`/payroll/rates/hra-amounts/${id}`),
+    missing: (asOn?: string) => api.get<RateCoverage & { asOn: string }>('/payroll/rates/hra-amounts/missing', { params: { asOn } }).then((r) => r.data),
+  },
   periods: {
+    allowances: (id: number) => api.get<AllowancePreview>(`/payroll/periods/${id}/allowances`).then((r) => r.data),
     list: (params: { status?: string; payrollType?: string; calendarYear?: number }) =>
       api.get<PayrollPeriod[]>('/payroll/periods', { params }).then((r) => r.data),
     create: (body: PeriodInput) => api.post<PayrollPeriod>('/payroll/periods', body).then((r) => r.data),
@@ -116,4 +132,12 @@ export interface HraCcaRateValues {
 export interface HraCcaRateInput extends HraCcaRateValues {
   effectiveFrom: string;
   effectiveTo?: string;
+}
+
+export interface HraAmountInput {
+  gccAmount: string | number;
+  otherAmount: string | number;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  remarks?: string;
 }

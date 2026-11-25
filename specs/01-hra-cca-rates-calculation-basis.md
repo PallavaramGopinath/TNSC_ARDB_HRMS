@@ -9,6 +9,8 @@
 | Status | Implemented (masters, basis setting, resolver); payroll-run wiring pending the calculator |
 | Date | 07-Nov-2026 |
 
+> **Changed by [spec 06](06-allowance-calculation-da-hra-cca-ma.md) (25-Nov-2026):** the basis no longer drives both allowances. It is now the **HRA method** (`PLACE`, `DESIGNATION` or `FIXED_AMOUNT`) and decides HRA only. CCA always goes by place, so place rates can be edited under every method (this replaces test 14). The API field `basis` is now `method` in `/settings/hra-cca-basis`, and missing-rate results list HRA and CCA separately.
+
 > **Note on assumptions:** this spec was drafted without access to the actual DDL. Column names other than `place_id`, `designation_id` and `branch_id` are assumed and marked *(assumed)*. See **§12 Implementation notes** for how it maps onto the real schema.
 
 ---
@@ -375,7 +377,7 @@ How the spec was fitted to this codebase:
 | "Payroll run open" (§4.4) | A period that is not LOCKED and already has pay bills. An OPEN period with no bills does not block, because Lock & Roll always opens the next month. The change applies from the earliest SALARY period not yet locked. |
 | "Used in a finalised payroll" (§5.2) | The rate's date range overlaps an APPROVED or LOCKED period. Replace this with the stored rate reference once pay lines record it. |
 | §4.2 mid-period changes | `resolveSegments` splits the month by transfer joining dates (PLACE) or approved promotion effect dates (DESIGNATION), as TNCU splits HRA/CCA into branch-day segments. Each segment uses the rate valid on the period end date. |
-| §11 Q1 | One basis drives both HRA and CCA (confirmed). |
+| §11 Q1 | One basis drives both HRA and CCA. **Superseded by spec 06:** the method decides HRA only. |
 | Screens | Payroll › Masters › HRA / CCA Rates (`/payroll/rates/hra-cca`) and Administration › Rule Settings (`/admin/settings`). |
 
 Code: `backend/src/services/payroll/hraCca{Rules,BasisService,RateService,RateResolver}.ts`, routes in `backend/src/routes/payroll.routes.ts`, UI in `frontend/src/pages/payroll/HraCcaRates.tsx` and `frontend/src/pages/admin/RuleSettings.tsx`.

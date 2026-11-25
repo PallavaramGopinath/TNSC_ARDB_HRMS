@@ -58,7 +58,8 @@ INSERT INTO core.app_settings (module, key, value, description, created_by) VALU
   ('payroll', 'payroll.encashment.max_days',       '240',             'Retirement leave encashment cap', 'seed'),
   ('payroll', 'payroll.sls.allowed_days',          '[15,30]',         'Surrender leave salary day options', 'seed'),
   ('payroll', 'payroll.neft.sender_name',          '"TNSC ARDB"',     'NEFT file sender name', 'seed'),
-  ('payroll', 'payroll.hra_cca.basis',             '"PLACE"',         'HRA/CCA rate looked up by PLACE (branch place category) or DESIGNATION; change via Rule Settings', 'seed')
+  ('payroll', 'payroll.hra_cca.basis',             '"PLACE"',         'HRA method: PLACE or DESIGNATION (percentage), or FIXED_AMOUNT (by designation and place). CCA always goes by place. Change via Rule Settings', 'seed'),
+  ('payroll', 'payroll.medical_allowance.amount',  '1000',            'Medical Allowance per month, all employees (spec 06 §7)', 'seed')
 ON CONFLICT (key, effective_from) DO NOTHING;
 
 -- -----------------------------------------------------------------------------
@@ -79,9 +80,9 @@ WHERE NOT EXISTS (SELECT 1 FROM hr.employee_leave_types t WHERE t.leave_code = v
 INSERT INTO payroll.payroll_components (component_name, component_code, component_type, is_da_applicable, is_surrender_leave_applicable, display_order, created_by)
 SELECT v.* , 'seed' FROM (VALUES
   ('Basic Pay',                    'BASIC',       1::smallint, true,  true,  10),
-  ('Personal Pay',                 'PP',          1, false, true,  20),
+  ('Personal Pay',                 'PP',          1, true,  true,  20),
   ('Grade Pay',                    'GP',          1, true,  true,  30),
-  ('Special Pay',                  'SP',          1, true,  true,  40),
+  ('Special Pay',                  'SP',          1, false, true,  40),
   ('Dearness Allowance',           'DA',          1, false, true,  50),
   ('House Rent Allowance',         'HRA',         1, false, true,  60),
   ('City Compensatory Allowance',  'CCA',         1, false, true,  70),
@@ -98,7 +99,7 @@ SELECT v.* , 'seed' FROM (VALUES
 WHERE NOT EXISTS (SELECT 1 FROM payroll.payroll_components p WHERE upper(p.component_code) = upper(v.c));
 
 -- -----------------------------------------------------------------------------
--- Rates (TNCU HrSeeder: DA 0%, PF 12%, HRA/CCA 0% per place, from FY start)
+-- Rates (TNCU HrSeeder: DA 0%, PF 12%, HRA 0% per place, from FY start; CCA per spec 06 §6)
 -- -----------------------------------------------------------------------------
 INSERT INTO payroll.payroll_da_rates (effective_from, da_percentage, created_by)
 SELECT DATE '2026-04-01', 0, 'seed' WHERE NOT EXISTS (SELECT 1 FROM payroll.payroll_da_rates);
@@ -106,9 +107,15 @@ SELECT DATE '2026-04-01', 0, 'seed' WHERE NOT EXISTS (SELECT 1 FROM payroll.payr
 INSERT INTO payroll.payroll_pf_deduction_rates (effective_from, pf_deduction_percentage, created_by)
 SELECT DATE '2026-04-01', 12, 'seed' WHERE NOT EXISTS (SELECT 1 FROM payroll.payroll_pf_deduction_rates);
 
-INSERT INTO payroll.payroll_hra_cca_rates (place_id, effective_from, created_by)
-SELECT p.id, DATE '2026-04-01', 'seed' FROM core.place_categories p
-WHERE NOT EXISTS (SELECT 1 FROM payroll.payroll_hra_cca_rates r WHERE r.place_id = p.id);
+INSERT INTO payroll.payroll_hra_cca_rates (place_id, effective_from, cca_percentage, cca_minimum_amount, cca_maximum_amount, created_by)
+SELECT p.id, DATE '2026-04-01',
+       CASE WHEN p.code = 'GCC' THEN 5    ELSE 3    END,
+       CASE WHEN p.code = 'GCC' THEN 1000 ELSE 800  END,
+       CASE WHEN p.code = 'GCC' THEN 1500 ELSE 1000 END,
+       'seed'
+FROM core.place_categories p
+WHERE p.code IN ('GCC', 'OC', 'ODHQ', 'OP')   -- a category added later is reported as missing until a rate is entered
+  AND NOT EXISTS (SELECT 1 FROM payroll.payroll_hra_cca_rates r WHERE r.place_id = p.id);
 
 INSERT INTO payroll.payroll_settings (financial_year_id, effective_from, created_by)
 SELECT fy.id, fy.start_date, 'seed' FROM core.financial_years fy
@@ -187,16 +194,18 @@ INSERT INTO core.menu_forms (id, sub_id, title, route, branch_code, display_orde
   (12010504, 120105, 'Penalty Orders',      '/hr/penalty-orders',          'HO', 4),
   -- Payroll › Processing
   (12020101, 120201, 'Payroll Periods',     '/payroll/periods',            'HO', 1),
-  (12020102, 120201, 'Payroll Preparation', '/payroll/preparation',        'HO', 2),
-  (12020103, 120201, 'Withheld Bills',      '/payroll/withheld',           'HO', 3),
-  (12020104, 120201, 'Mark Paid / NEFT',    '/payroll/payments',           'HO', 4),
+  (12020105, 120201, 'Allowance Preview',   '/payroll/allowances',         'HO', 2),
+  (12020102, 120201, 'Payroll Preparation', '/payroll/preparation',        'HO', 3),
+  (12020103, 120201, 'Withheld Bills',      '/payroll/withheld',           'HO', 4),
+  (12020104, 120201, 'Mark Paid / NEFT',    '/payroll/payments',           'HO', 5),
   -- Payroll › Masters
   (12020201, 120202, 'Components',          '/payroll/components',         'HO', 1),
   (12020202, 120202, 'Component Assignments','/payroll/components/assignments','HO', 2),
   (12020203, 120202, 'DA Rates',            '/payroll/rates/da',           'HO', 3),
   (12020204, 120202, 'PF Rates',            '/payroll/rates/pf',           'HO', 4),
   (12020205, 120202, 'HRA / CCA Rates',     '/payroll/rates/hra-cca',      'HO', 5),
-  (12020206, 120202, 'Payroll Settings',    '/payroll/settings',           'HO', 6),
+  (12020207, 120202, 'HRA Amounts',         '/payroll/rates/hra-amounts',  'HO', 6),
+  (12020206, 120202, 'Payroll Settings',    '/payroll/settings',           'HO', 7),
   -- Payroll › Arrears & Encashment
   (12020301, 120203, 'DA Arrears',          '/payroll/da-arrears',         'HO', 1),
   (12020302, 120203, 'Surrender Leave Salary','/payroll/surrender-leave-salary','HO', 2),

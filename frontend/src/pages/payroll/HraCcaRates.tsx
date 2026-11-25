@@ -19,18 +19,21 @@ import { errorMessage, fieldErrors } from '@/services/api';
 import { coreApi } from '@/services/core';
 import { hrApi } from '@/services/hr';
 import { payrollApi, type HraCcaRateInput } from '@/services/payroll';
-import type { HraCcaBasis, HraCcaRate, HraCcaStatus } from '@/types/api';
+import type { HraCcaBasis, HraCcaRate, HraCcaStatus, HraMethod, RateCoverage } from '@/types/api';
 
 /**
- * Payroll › Masters › HRA & CCA Rates (specs/01 §5.2–5.5). The screen follows the organisation's
- * calculation basis: rates per place category (PLACE) or per designation (DESIGNATION).
+ * Payroll › Masters › HRA & CCA Rates (specs/01 §5.2–5.5, specs/06 §12.2). Percentage rates per place category
+ * or per designation. Place rates always carry CCA; they carry HRA only when HRA goes by place. Designation
+ * rates carry HRA only. Fixed HRA amounts have their own screen.
  */
 const col = createColumnHelper<HraCcaRate>();
 const pct = (v: string | number) => Number(v).toFixed(2);
 const today = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 const keyLabel = (b: HraCcaBasis) => (b === 'PLACE' ? 'Place' : 'Designation');
-const basisText = (b: HraCcaBasis) => (b === 'PLACE' ? 'PLACE OF POSTING' : 'DESIGNATION');
-const other = (b: HraCcaBasis): HraCcaBasis => (b === 'PLACE' ? 'DESIGNATION' : 'PLACE');
+const methodText: Record<HraMethod, string> = { PLACE: 'PLACE OF POSTING (%)', DESIGNATION: 'DESIGNATION (%)', FIXED_AMOUNT: 'FIXED AMOUNT BY DESIGNATION AND PLACE' };
+/** Which parts of a rate row payroll uses. Parts not used are hidden and keep their stored values. */
+const usesHra = (b: HraCcaBasis, m: HraMethod) => b === m;
+const usesCca = (b: HraCcaBasis) => b === 'PLACE';
 
 const statusTone: Record<HraCcaStatus, 'success' | 'brand' | 'neutral' | 'danger'> = { CURRENT: 'success', FUTURE: 'brand', EXPIRED: 'neutral', INACTIVE: 'danger' };
 const statusOptions: Option[] = [
@@ -48,14 +51,14 @@ const caps = (min: string, max: string) => {
 };
 
 type FormMode = 'add' | 'edit' | 'revise' | 'view';
-interface FormState { mode: FormMode; row?: HraCcaRate; keyId?: number }
+interface FormState { mode: FormMode; row?: HraCcaRate; keyId?: number; basis?: HraCcaBasis }
 
 export function HraCcaRatesPage() {
   const qc = useQueryClient();
   const { user } = useAuth();
   const canEdit = !!user && (user.isAdmin || user.roles.includes('Payroll'));
 
-  const [showOtherBasis, setShowOtherBasis] = useState(false);
+  const [chosenBasis, setChosenBasis] = useState<HraCcaBasis | null>(null);
   const [keyId, setKeyId] = useState('');
   const [status, setStatus] = useState('CURRENT');
   const [asOn, setAsOn] = useState(today());
@@ -68,9 +71,13 @@ export function HraCcaRatesPage() {
   const [notice, setNotice] = useState<string | null>(null);
 
   const basisQ = useQuery({ queryKey: ['hra-cca-basis'], queryFn: payrollApi.hraCcaBasis.status });
-  const active = basisQ.data?.basis;
-  const shownBasis = active ? (showOtherBasis ? other(active) : active) : undefined;
-  const readOnly = !canEdit || showOtherBasis;
+  const method = basisQ.data?.method;
+  const shownBasis = method ? (chosenBasis ?? (method === 'DESIGNATION' ? 'DESIGNATION' : 'PLACE')) : undefined;
+  const inactiveBasis = shownBasis === 'DESIGNATION' && method !== 'DESIGNATION';
+  const readOnly = !canEdit || inactiveBasis;
+  // Rows no longer in use show everything they held.
+  const showHra = !!shownBasis && !!method && (inactiveBasis || usesHra(shownBasis, method));
+  const showCca = !!shownBasis && (inactiveBasis || usesCca(shownBasis));
 
   const places = useQuery({ queryKey: ['place-categories'], queryFn: coreApi.placeCategories, staleTime: 10 * 60_000 });
   const designations = useQuery({ queryKey: ['designations', '', false], queryFn: () => hrApi.designations.list(), staleTime: 60_000 });
@@ -92,7 +99,7 @@ export function HraCcaRatesPage() {
     size: 25,
   };
   const listQ = useQuery({ queryKey: ['hra-cca-rates', params], queryFn: () => payrollApi.hraCca.list(params), enabled: !!shownBasis });
-  const missingQ = useQuery({ queryKey: ['hra-cca-missing', asOn], queryFn: () => payrollApi.hraCca.missing(asOn || undefined), enabled: !!active });
+  const missingQ = useQuery({ queryKey: ['hra-cca-missing', asOn], queryFn: () => payrollApi.hraCca.missing(asOn || undefined), enabled: !!method });
 
   const refresh = (msg?: string) => {
     setNotice(msg ?? null);
@@ -104,7 +111,7 @@ export function HraCcaRatesPage() {
   const columns = useMemo(
     () => [
       col.accessor('key_name', { header: shownBasis ? keyLabel(shownBasis) : 'Key', cell: (c) => <span className="font-medium">{c.getValue()}</span> }),
-      col.accessor('hra_percentage', {
+      ...(showHra ? [col.accessor('hra_percentage', {
         header: () => <span className="block text-right">HRA %</span>,
         cell: (c) => (
           <span className="block text-right">
@@ -112,8 +119,8 @@ export function HraCcaRatesPage() {
             <span className="block text-xs text-ink-500">{caps(c.row.original.hra_minimum_amount, c.row.original.hra_maximum_amount)}</span>
           </span>
         ),
-      }),
-      col.accessor('cca_percentage', {
+      })] : []),
+      ...(showCca ? [col.accessor('cca_percentage', {
         header: () => <span className="block text-right">CCA %</span>,
         cell: (c) => (
           <span className="block text-right">
@@ -121,7 +128,7 @@ export function HraCcaRatesPage() {
             <span className="block text-xs text-ink-500">{caps(c.row.original.cca_minimum_amount, c.row.original.cca_maximum_amount)}</span>
           </span>
         ),
-      }),
+      })] : []),
       col.accessor('effective_from', { header: 'Eff. from', cell: (c) => formatDate(c.getValue()) }),
       col.accessor('effective_to', { header: 'Eff. to', cell: (c) => (c.getValue() ? formatDate(c.getValue()) : <span className="text-ink-500">—</span>) }),
       col.accessor('status', { header: 'Status', cell: (c) => <Badge tone={statusTone[c.getValue()]}>{c.getValue().charAt(0) + c.getValue().slice(1).toLowerCase()}</Badge> }),
@@ -148,18 +155,27 @@ export function HraCcaRatesPage() {
         },
       }),
     ],
-    [shownBasis, readOnly],
+    [shownBasis, readOnly, showHra, showCca],
   );
 
-  const missingCount = missingQ.data?.missing.length ?? 0;
+  // The HRA list is for this screen only when HRA is a percentage; fixed amounts have their own screen.
+  const gaps: Array<{ what: string; basis: HraCcaBasis; cover: RateCoverage }> = missingQ.data
+    ? method === 'PLACE'
+      ? [{ what: 'HRA and CCA', basis: 'PLACE', cover: missingQ.data.cca }]
+      : [
+          ...(method === 'DESIGNATION' ? [{ what: 'HRA', basis: 'DESIGNATION' as const, cover: missingQ.data.hra }] : []),
+          { what: 'CCA', basis: 'PLACE', cover: missingQ.data.cca },
+        ]
+    : [];
+  const missingCount = gaps.reduce((n, g) => n + g.cover.missing.length, 0);
 
   return (
     <>
       <PageHeader
         title="HRA & CCA Rates"
-        subtitle="House Rent and City Compensatory Allowance as a % of Basic + Grade Pay + Special Pay, with optional minimum and maximum"
+        subtitle="House Rent and City Compensatory Allowance as a % of Basic + Personal Pay + Grade Pay, with optional minimum and maximum"
         actions={
-          canEdit && active && !showOtherBasis ? (
+          canEdit && shownBasis && !inactiveBasis ? (
             <>
               <Button variant="secondary" onClick={() => setShowBulk(true)}><ListChecks size={16} /> Revise all</Button>
               <Button onClick={() => setForm({ mode: 'add' })}><Plus size={16} /> Add rate</Button>
@@ -168,20 +184,32 @@ export function HraCcaRatesPage() {
         }
       />
 
-      {active && (
+      {method && basisQ.data && (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-brand-100 bg-brand-25 px-4 py-3 text-sm text-ink-800">
           <span className="flex items-center gap-2">
-            <Info size={16} className="text-brand-600" />
-            Rates are applied by <b>{basisText(active)}</b> for this organisation
-            {basisQ.data && basisQ.data.todayBasis !== active && <> from {formatDate(basisQ.data.effectiveFrom)} (until then by {basisText(basisQ.data.todayBasis)})</>}.
+            <Info size={16} className="shrink-0 text-brand-600" />
+            <span>
+              HRA is paid by <b>{methodText[method]}</b>
+              {basisQ.data.todayMethod !== method && <> from {formatDate(basisQ.data.effectiveFrom)} (until then by {methodText[basisQ.data.todayMethod]})</>}; CCA always by <b>PLACE OF POSTING</b>.
+              {method === 'FIXED_AMOUNT' && <> <Link to="/payroll/rates/hra-amounts" className="font-semibold text-brand-700 hover:underline">HRA amounts</Link></>}
+            </span>
           </span>
-          {user?.isAdmin && <Link to="/admin/settings" className="font-semibold text-brand-700 hover:underline">Change basis</Link>}
+          {user?.isAdmin && <Link to="/admin/settings" className="font-semibold text-brand-700 hover:underline">Change HRA method</Link>}
         </div>
       )}
 
-      {showOtherBasis && shownBasis && (
+      <div role="group" aria-label="Rates by" className="mb-4 inline-flex rounded-lg border border-ink-200 p-0.5">
+        {(['PLACE', 'DESIGNATION'] as const).map((b) => (
+          <button key={b} type="button" aria-pressed={shownBasis === b} onClick={() => setChosenBasis(b)}
+            className={`rounded-md px-3 py-1.5 text-sm font-semibold ${shownBasis === b ? 'bg-brand-600 text-white' : 'text-ink-600 hover:bg-ink-50'}`}>
+            By {keyLabel(b).toLowerCase()} ({basisQ.data?.rateCounts[b] ?? 0})
+          </button>
+        ))}
+      </div>
+
+      {inactiveBasis && (
         <p className="mb-4 flex items-center gap-2 rounded-lg bg-warning-50 px-4 py-2 text-sm text-warning-700">
-          <History size={16} /> Showing {basisText(shownBasis).toLowerCase()} rates of the inactive basis. They are kept for history and are not used by payroll.
+          <History size={16} /> Designation rates are kept for history and are not used by payroll under the present HRA method.
         </p>
       )}
 
@@ -190,15 +218,10 @@ export function HraCcaRatesPage() {
         <Select label="Status" placeholder="Any" options={statusOptions} value={status} onChange={(e) => { setStatus(e.target.value || 'ALL'); setPage(1); }} />
         <Field label="As on" type="date" value={asOn} onChange={(e) => { setAsOn(e.target.value); setPage(1); }} />
         <Field label="Search" placeholder={`Search ${shownBasis ? keyLabel(shownBasis).toLowerCase() : ''}`} value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
-        <Button variant={missingCount ? 'secondary' : 'ghost'} className={missingCount ? 'border-warning-500 text-warning-700' : ''} onClick={() => setShowMissing(true)} disabled={!active}>
+        <Button variant={missingCount ? 'secondary' : 'ghost'} className={missingCount ? 'border-warning-500 text-warning-700' : ''} onClick={() => setShowMissing(true)} disabled={!method}>
           <AlertTriangle size={16} /> Missing rates ({missingQ.isLoading ? '…' : missingCount})
         </Button>
       </div>
-      <label className="mb-3 flex items-center gap-2 text-sm text-ink-600">
-        <input type="checkbox" className="accent-brand-600" checked={showOtherBasis} onChange={(e) => setShowOtherBasis(e.target.checked)} /> Show rates of inactive basis
-        {active && <span className="text-ink-400">({basisQ.data?.rateCounts[other(active)] ?? 0} {keyLabel(other(active)).toLowerCase()} rates)</span>}
-      </label>
-
       {notice && (
         <p role="status" className="mb-3 flex items-start justify-between gap-3 rounded-lg bg-warning-50 px-3 py-2 text-sm text-warning-700">
           <span>{notice}</span>
@@ -212,8 +235,9 @@ export function HraCcaRatesPage() {
       {form && shownBasis && (
         <RateForm
           state={form}
-          basis={form.row?.rate_basis ?? shownBasis}
-          keyOptions={keyOptions(form.row?.rate_basis ?? shownBasis)}
+          basis={form.row?.rate_basis ?? form.basis ?? shownBasis}
+          method={method!}
+          keyOptions={keyOptions(form.row?.rate_basis ?? form.basis ?? shownBasis)}
           onClose={() => setForm(null)}
           onSaved={(warnings) => { setForm(null); refresh(warnings.length ? warnings.join(' ') : undefined); }}
         />
@@ -223,31 +247,33 @@ export function HraCcaRatesPage() {
         <DeactivateDialog row={deactivating} onClose={() => setDeactivating(null)} onDone={() => { setDeactivating(null); refresh(); }} />
       )}
 
-      {showMissing && active && (
+      {showMissing && method && (
         <Modal open title={`Missing rates as on ${formatDate(asOn)}`} onClose={() => setShowMissing(false)}>
           <p className="mb-3 text-sm text-ink-600">
-            {keyLabel(active)}s with serving employees but no current rate. Payroll will flag these employees until a rate is added.
+            Serving employees with no current rate. Payroll will flag these employees until a rate is added.
           </p>
-          {missingQ.data?.missing.length ? (
-            <ul className="divide-y divide-ink-100 rounded-lg border border-ink-200">
-              {missingQ.data.missing.map((m) => (
-                <li key={m.keyId ?? 'none'} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-                  <span><b>{m.keyName}</b> <span className="text-ink-500">· {m.employeeCount} employee{m.employeeCount === 1 ? '' : 's'}</span></span>
-                  {canEdit && m.keyId !== null && (
-                    <Button variant="secondary" onClick={() => { setShowMissing(false); setShowOtherBasis(false); setForm({ mode: 'add', keyId: m.keyId! }); }}>Add rate</Button>
-                  )}
-                  {m.keyId === null && <Link to="/hr/branches" className="text-xs font-semibold text-brand-700">Set place on branch</Link>}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="rounded-lg bg-success-50 px-3 py-2 text-sm text-success-700">Every {keyLabel(active).toLowerCase()} with employees has a current rate.</p>
-          )}
+          {missingCount === 0 && <p className="rounded-lg bg-success-50 px-3 py-2 text-sm text-success-700">No rates are missing.</p>}
+          {gaps.filter((g) => g.cover.missing.length).map((g) => (
+            <div key={g.what} className="mb-3">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-500">{g.what}</p>
+              <ul className="divide-y divide-ink-100 rounded-lg border border-ink-200">
+                {g.cover.missing.map((m) => (
+                  <li key={m.keyId ?? 'none'} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                    <span><b>{m.keyName}</b> <span className="text-ink-500">· {m.employeeCount} employee{m.employeeCount === 1 ? '' : 's'}</span></span>
+                    {canEdit && m.keyId !== null && (
+                      <Button variant="secondary" onClick={() => { setShowMissing(false); setForm({ mode: 'add', keyId: m.keyId!, basis: g.basis }); }}>Add rate</Button>
+                    )}
+                    {m.keyId === null && <Link to="/hr/branches" className="text-xs font-semibold text-brand-700">Set place on branch</Link>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </Modal>
       )}
 
-      {showBulk && active && (
-        <BulkReviseDialog basis={active} onClose={() => setShowBulk(false)} onSaved={(msg) => { setShowBulk(false); refresh(msg); }} />
+      {showBulk && shownBasis && (
+        <BulkReviseDialog basis={shownBasis} showHra={showHra} showCca={showCca} onClose={() => setShowBulk(false)} onSaved={(msg) => { setShowBulk(false); refresh(msg); }} />
       )}
     </>
   );
@@ -269,9 +295,10 @@ interface FormValues {
 
 const pctRule = { required: 'Enter a value between 0 and 100.', min: { value: 0, message: 'Enter a value between 0 and 100.' }, max: { value: 100, message: 'Enter a value between 0 and 100.' } };
 
-function RateForm({ state, basis, keyOptions, onClose, onSaved }: {
+function RateForm({ state, basis, method, keyOptions, onClose, onSaved }: {
   state: FormState;
   basis: HraCcaBasis;
+  method: HraMethod;
   keyOptions: Option[];
   onClose: () => void;
   onSaved: (warnings: string[]) => void;
@@ -280,14 +307,17 @@ function RateForm({ state, basis, keyOptions, onClose, onSaved }: {
   const detail = useQuery({ queryKey: ['hra-cca-rate', row?.id], queryFn: () => payrollApi.hraCca.get(row!.id), enabled: !!row });
   const locked = mode === 'edit' && !!detail.data?.usedInFinalisedPayroll;
   const viewOnly = mode === 'view';
+  const inUse = usesHra(basis, method) || usesCca(basis);
+  const showHra = !inUse || usesHra(basis, method);
+  const showCca = !inUse || usesCca(basis);
 
   const { register, handleSubmit, watch, setError, formState } = useForm<FormValues>({
     defaultValues: {
       keyId: String(state.keyId ?? (row ? (basis === 'PLACE' ? row.place_id : row.designation_id) : '') ?? ''),
-      hraPercent: row ? pct(row.hra_percentage) : '',
+      hraPercent: row ? pct(row.hra_percentage) : showHra ? '' : '0',
       hraMinAmount: row ? row.hra_minimum_amount : '0',
       hraMaxAmount: row ? row.hra_maximum_amount : '0',
-      ccaPercent: row ? pct(row.cca_percentage) : '',
+      ccaPercent: row ? pct(row.cca_percentage) : showCca ? '' : '0',
       ccaMinAmount: row ? row.cca_minimum_amount : '0',
       ccaMaxAmount: row ? row.cca_maximum_amount : '0',
       effectiveFrom: mode === 'revise' ? '' : row?.effective_from ?? '',
@@ -343,7 +373,7 @@ function RateForm({ state, basis, keyOptions, onClose, onSaved }: {
         )}
         {mode === 'revise' && row && (
           <p className="rounded-lg bg-brand-25 px-3 py-2 text-sm text-ink-700">
-            Current: HRA {pct(row.hra_percentage)}%, CCA {pct(row.cca_percentage)}% from {formatDate(row.effective_from)}. It will close the day before the new effective date.
+            Current: {[showHra && `HRA ${pct(row.hra_percentage)}%`, showCca && `CCA ${pct(row.cca_percentage)}%`].filter(Boolean).join(', ')} from {formatDate(row.effective_from)}. It will close the day before the new effective date.
           </p>
         )}
         {locked && (
@@ -353,12 +383,20 @@ function RateForm({ state, basis, keyOptions, onClose, onSaved }: {
         )}
         <fieldset disabled={ro} className="space-y-4">
           <div className="grid grid-cols-3 gap-3">
-            <Field label="HRA % *" type="number" step="0.01" min={0} max={100} {...register('hraPercent', pctRule)} error={err('hraPercent')} />
-            <Field label="HRA min ₹" type="number" step="0.01" min={0} {...register('hraMinAmount')} error={err('hraMinAmount')} />
-            <Field label="HRA max ₹ (0 = no cap)" type="number" step="0.01" min={0} {...register('hraMaxAmount')} error={err('hraMaxAmount')} />
-            <Field label="CCA % *" type="number" step="0.01" min={0} max={100} {...register('ccaPercent', pctRule)} error={err('ccaPercent')} />
-            <Field label="CCA min ₹" type="number" step="0.01" min={0} {...register('ccaMinAmount')} error={err('ccaMinAmount')} />
-            <Field label="CCA max ₹ (0 = no cap)" type="number" step="0.01" min={0} {...register('ccaMaxAmount')} error={err('ccaMaxAmount')} />
+            {showHra && (
+              <>
+                <Field label="HRA % *" type="number" step="0.01" min={0} max={100} {...register('hraPercent', pctRule)} error={err('hraPercent')} />
+                <Field label="HRA min ₹" type="number" step="0.01" min={0} {...register('hraMinAmount')} error={err('hraMinAmount')} />
+                <Field label="HRA max ₹ (0 = no cap)" type="number" step="0.01" min={0} {...register('hraMaxAmount')} error={err('hraMaxAmount')} />
+              </>
+            )}
+            {showCca && (
+              <>
+                <Field label="CCA % *" type="number" step="0.01" min={0} max={100} {...register('ccaPercent', pctRule)} error={err('ccaPercent')} />
+                <Field label="CCA min ₹" type="number" step="0.01" min={0} {...register('ccaMinAmount')} error={err('ccaMinAmount')} />
+                <Field label="CCA max ₹ (0 = no cap)" type="number" step="0.01" min={0} {...register('ccaMaxAmount')} error={err('ccaMaxAmount')} />
+              </>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Effective from *" type="date" {...register('effectiveFrom', { required: 'Enter a date' })} error={err('effectiveFrom')} />
@@ -387,7 +425,7 @@ function DeactivateDialog({ row, onClose, onDone }: { row: HraCcaRate; onClose: 
   return (
     <Modal open title="Deactivate rate?" onClose={onClose}>
       <p className="text-sm text-ink-700">
-        HRA {pct(row.hra_percentage)}% / CCA {pct(row.cca_percentage)}% for <b>{row.key_name}</b> from {formatDate(row.effective_from)} will no longer be used.
+        The rate for <b>{row.key_name}</b> from {formatDate(row.effective_from)} will no longer be used.
         Employees mapped to it will show as missing a rate.
       </p>
       {del.isError && <p role="alert" className="mt-3 rounded-lg bg-danger-50 px-3 py-2 text-sm text-danger-700">{errorMessage(del.error)}</p>}
@@ -400,7 +438,7 @@ function DeactivateDialog({ row, onClose, onDone }: { row: HraCcaRate; onClose: 
 }
 
 // ---------------------------------------------------------------- bulk revision (spec §5.5)
-function BulkReviseDialog({ basis, onClose, onSaved }: { basis: HraCcaBasis; onClose: () => void; onSaved: (msg?: string) => void }) {
+function BulkReviseDialog({ basis, showHra, showCca, onClose, onSaved }: { basis: HraCcaBasis; showHra: boolean; showCca: boolean; onClose: () => void; onSaved: (msg?: string) => void }) {
   const [effectiveFrom, setEffectiveFrom] = useState('');
   const [remarks, setRemarks] = useState('');
   const [edits, setEdits] = useState<Record<number, { hra: string; cca: string }>>({});
@@ -419,6 +457,7 @@ function BulkReviseDialog({ basis, onClose, onSaved }: { basis: HraCcaBasis; onC
   const save = useMutation({
     mutationFn: () =>
       payrollApi.hraCca.bulkRevise({
+        basis,
         effectiveFrom,
         remarks: remarks || undefined,
         items: changed.map((r) => ({
@@ -444,7 +483,7 @@ function BulkReviseDialog({ basis, onClose, onSaved }: { basis: HraCcaBasis; onC
         <div className="max-h-[45vh] overflow-y-auto rounded-lg border border-ink-200">
           <table className="min-w-full text-sm">
             <thead className="sticky top-0 bg-ink-50 text-left text-xs font-semibold uppercase text-ink-500">
-              <tr><th className="px-3 py-2">{keyLabel(basis)}</th><th className="px-3 py-2">HRA %</th><th className="px-3 py-2">CCA %</th></tr>
+              <tr><th className="px-3 py-2">{keyLabel(basis)}</th>{showHra && <th className="px-3 py-2">HRA %</th>}{showCca && <th className="px-3 py-2">CCA %</th>}</tr>
             </thead>
             <tbody className="divide-y divide-ink-100">
               {current.isLoading && <tr><td colSpan={3} className="px-3 py-4 text-center text-ink-400">Loading…</td></tr>}
@@ -455,8 +494,8 @@ function BulkReviseDialog({ basis, onClose, onSaved }: { basis: HraCcaBasis; onC
                 return (
                   <tr key={r.id}>
                     <td className="px-3 py-1.5 font-medium">{r.key_name}</td>
-                    <td className="px-3 py-1.5"><input aria-label={`HRA % for ${r.key_name}`} className="field-input w-24" type="number" step="0.01" min={0} max={100} value={v.hra} onChange={(e) => set('hra', e.target.value)} /></td>
-                    <td className="px-3 py-1.5"><input aria-label={`CCA % for ${r.key_name}`} className="field-input w-24" type="number" step="0.01" min={0} max={100} value={v.cca} onChange={(e) => set('cca', e.target.value)} /></td>
+                    {showHra && <td className="px-3 py-1.5"><input aria-label={`HRA % for ${r.key_name}`} className="field-input w-24" type="number" step="0.01" min={0} max={100} value={v.hra} onChange={(e) => set('hra', e.target.value)} /></td>}
+                    {showCca && <td className="px-3 py-1.5"><input aria-label={`CCA % for ${r.key_name}`} className="field-input w-24" type="number" step="0.01" min={0} max={100} value={v.cca} onChange={(e) => set('cca', e.target.value)} /></td>}
                   </tr>
                 );
               })}
