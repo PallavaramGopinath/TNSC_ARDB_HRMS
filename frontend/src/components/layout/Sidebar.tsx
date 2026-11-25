@@ -1,7 +1,7 @@
 import clsx from 'clsx';
 import { ChevronDown, LogOut, Search } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import type { MenuMain } from '@/types/api';
 import { useAuth } from '@/hooks/useAuth';
 import { iconFor } from './icons';
@@ -14,10 +14,8 @@ import { iconFor } from './icons';
 export function Sidebar({ menu }: { menu: MenuMain[] }) {
   const { signOut } = useAuth();
   const location = useLocation();
-  const owning = useMemo(
-    () => menu.find((m) => m.subs.some((s) => matches(s.route, location.pathname) || s.forms.some((f) => matches(f.route, location.pathname)))),
-    [menu, location.pathname],
-  );
+  const activeRoute = useMemo(() => routeFor(menu, location.pathname), [menu, location.pathname]);
+  const owning = useMemo(() => menu.find((m) => !!activeRoute && routesOf(m).includes(activeRoute)), [menu, activeRoute]);
   const [activeId, setActiveId] = useState<number | undefined>(owning?.id ?? menu[0]?.id);
   const [query, setQuery] = useState('');
   useEffect(() => { if (owning) setActiveId(owning.id); }, [owning]);
@@ -70,15 +68,22 @@ export function Sidebar({ menu }: { menu: MenuMain[] }) {
             const forms = s.forms.filter((f) => !q || f.title.toLowerCase().includes(q));
             if (s.route) {
               if (q && !s.title.toLowerCase().includes(q)) return null;
-              return <NavItem key={s.id} to={s.route} label={s.title} icon={s.icon} />;
+              return <NavItem key={s.id} to={s.route} active={s.route === activeRoute} label={s.title} icon={s.icon} />;
             }
             if (forms.length === 0) return null;
-            return <Group key={s.id} title={s.title} icon={s.icon} forceOpen={!!q}>{forms.map((f) => <NavItem key={f.id} to={f.route} label={f.title} nested />)}</Group>;
+            return <Group key={s.id} title={s.title} icon={s.icon} forceOpen={!!q}>{forms.map((f) => <NavItem key={f.id} to={f.route} active={f.route === activeRoute} label={f.title} nested />)}</Group>;
           })}
         </div>
       </div>
     </aside>
   );
+}
+
+const routesOf = (m: MenuMain) => m.subs.flatMap((s) => [s.route, ...s.forms.map((f) => f.route)]);
+
+/** The menu route a page belongs to: the longest match, so a nested route does not also light up its parent. */
+function routeFor(menu: MenuMain[], path: string): string | null {
+  return menu.flatMap(routesOf).reduce<string | null>((best, r) => (matches(r, path) && r!.length > (best?.length ?? 0) ? r : best), null);
 }
 
 function matches(route: string | null, path: string) {
@@ -102,22 +107,20 @@ function Group({ title, icon, children, forceOpen }: { title: string; icon: stri
   );
 }
 
-function NavItem({ to, label, icon, nested }: { to: string; label: string; icon?: string | null; nested?: boolean }) {
+function NavItem({ to, active, label, icon, nested }: { to: string; active: boolean; label: string; icon?: string | null; nested?: boolean }) {
   const Icon = icon ? iconFor(icon) : null;
   return (
-    <NavLink
+    <Link
       to={to}
-      end={to === '/'}
-      className={({ isActive }) =>
-        clsx(
-          'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm',
-          nested && 'pl-8',
-          isActive ? 'bg-brand-50 font-semibold text-brand-700' : 'text-ink-700 hover:bg-ink-50',
-        )
-      }
+      aria-current={active ? 'page' : undefined}
+      className={clsx(
+        'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm',
+        nested && 'pl-8',
+        active ? 'bg-brand-50 font-semibold text-brand-700' : 'text-ink-700 hover:bg-ink-50',
+      )}
     >
       {Icon && <Icon size={16} />}
       {label}
-    </NavLink>
+    </Link>
   );
 }
