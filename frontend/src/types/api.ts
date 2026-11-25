@@ -359,6 +359,42 @@ export interface HraAmountDetail extends HraAmount {
   warnings?: string[];
 }
 
+export type AssignedType = 'FIXED' | 'PERCENTAGE';
+export interface ComponentAssignment {
+  id: number;
+  employee_id: number;
+  employee_code: string;
+  employee_name: string;
+  designation_name: string;
+  component_id: number;
+  component_code: string;
+  component_name: string;
+  component_type: 1 | 2 | 3;
+  assigned_type: AssignedType;
+  assigned_amount: string;
+  percentage: string;
+  minimum_amount: string;
+  maximum_amount: string;
+  /** Null on rows loaded from elsewhere: always in force. */
+  effective_from: string | null;
+  effective_to: string | null;
+  is_active: boolean;
+  created_by: string;
+  created_at: string;
+  status: HraCcaStatus;
+}
+export interface ComponentAssignmentDetail extends ComponentAssignment {
+  usedInFinalisedPayroll: boolean;
+  warnings?: string[];
+}
+export interface ComponentAssignmentList {
+  asOn: string;
+  page: number;
+  size: number;
+  total: number;
+  items: ComponentAssignment[];
+}
+
 export interface AllowanceIssue {
   code: 'BASIC_PAY' | 'DA_RATE' | 'HRA' | 'CCA' | 'MA' | 'PART_MONTH';
   severity: 'ERROR' | 'WARNING';

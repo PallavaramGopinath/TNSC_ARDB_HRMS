@@ -1,6 +1,9 @@
 import { api } from './api';
 import type {
   AllowancePreview,
+  AssignedType,
+  ComponentAssignmentDetail,
+  ComponentAssignmentList,
   EffectiveRate,
   HraAmount,
   HraAmountDetail,
@@ -49,6 +52,15 @@ export const payrollApi = {
     setActive: (id: number, isActive: boolean) =>
       api.delete<PayrollComponent>(`/payroll/components/${id}`, { params: { isActive } }).then((r) => r.data),
     remove: (id: number) => api.delete(`/payroll/components/${id}/permanent`),
+  },
+  assignments: {
+    list: (params: AssignmentListParams) => api.get<ComponentAssignmentList>('/payroll/component-assignments', { params }).then((r) => r.data),
+    get: (id: number) => api.get<ComponentAssignmentDetail>(`/payroll/component-assignments/${id}`).then((r) => r.data),
+    create: (body: AssignmentInput & { employeeId: number; componentId: number | string }) =>
+      api.post<ComponentAssignmentDetail>('/payroll/component-assignments', body).then((r) => r.data),
+    update: (id: number, body: AssignmentInput) => api.put<ComponentAssignmentDetail>(`/payroll/component-assignments/${id}`, body).then((r) => r.data),
+    revise: (id: number, body: AssignmentInput) => api.post<ComponentAssignmentDetail>(`/payroll/component-assignments/${id}/revise`, body).then((r) => r.data),
+    deactivate: (id: number) => api.delete(`/payroll/component-assignments/${id}`),
   },
   daRates: rateApi('da', 'daPercentage'),
   pfRates: rateApi('pf', 'pfPercentage'),
@@ -140,4 +152,25 @@ export interface HraAmountInput {
   effectiveFrom: string;
   effectiveTo?: string;
   remarks?: string;
+}
+
+export interface AssignmentListParams {
+  employeeId?: number;
+  componentId?: number | string;
+  status?: string;
+  asOn?: string;
+  search?: string;
+  page?: number;
+  size?: number;
+}
+
+/** Only the figures of the chosen type are kept; the server stores the others as 0. */
+export interface AssignmentInput {
+  assignedType: AssignedType;
+  assignedAmount: string;
+  percentage: string;
+  minimumAmount: string;
+  maximumAmount: string;
+  effectiveFrom: string;
+  effectiveTo?: string;
 }

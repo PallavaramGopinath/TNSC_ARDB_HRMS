@@ -246,4 +246,4 @@ Example 4 has exactly 50 paise in DA, which rounds up.
 
 **To start using it:** enter the DA rate and the HRA amounts (checked against the original settlement), then choose "Fixed amount by designation and place" in Administration › Rule Settings.
 
-**Still to do when Payroll Preparation is built:** block finalisation on ERROR issues; store the applied row ids (already returned as `applied`) on the pay line; loss of pay; part-month joiners and leavers (warned about now); increments within the month; Component Assignments screen, without which PP and GP show as 0.
+**Still to do when Payroll Preparation is built:** block finalisation on ERROR issues; store the applied row ids (already returned as `applied`) on the pay line; loss of pay; part-month joiners and leavers (warned about now); increments within the month. PP and GP are entered on Payroll › Masters › Component Assignments; without an assignment they show as 0.

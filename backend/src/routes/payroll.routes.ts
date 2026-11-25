@@ -22,6 +22,8 @@ import {
 } from '../models/payroll/hraCca.schema';
 import * as hraAmounts from '../controllers/payroll/hraAmountController';
 import { HraAmountCreateSchema, HraAmountQuerySchema, HraAmountReviseSchema, HraAmountUpdateSchema } from '../models/payroll/hraAmount.schema';
+import * as assignments from '../controllers/payroll/componentAssignmentController';
+import { AssignmentCreateSchema, AssignmentQuerySchema, AssignmentReviseSchema, AssignmentUpdateSchema } from '../models/payroll/componentAssignment.schema';
 import { PfRateInputSchema } from '../models/payroll/pfRate.schema';
 import { ComponentInputSchema, ComponentQuerySchema } from '../models/payroll/component.schema';
 import { SetActiveQuerySchema } from '../models/hr/bankMaster.schema';
@@ -46,6 +48,14 @@ export function buildPayrollRouter(): Router {
   r.put('/components/:id', write, validate(IdParamSchema, 'params'), validate(ComponentInputSchema), h(components.update));
   r.delete('/components/:id/permanent', write, validate(IdParamSchema, 'params'), h(components.remove));
   r.delete('/components/:id', write, validate(IdParamSchema, 'params'), validate(SetActiveQuerySchema, 'query'), h(components.setActive));
+
+  // Component assignments — docs §3.1 (read HR/Payroll, write Payroll, Admin always)
+  r.get('/component-assignments', read, validate(AssignmentQuerySchema, 'query'), h(assignments.list));
+  r.post('/component-assignments', write, validate(AssignmentCreateSchema), h(assignments.create));
+  r.get('/component-assignments/:id', read, validate(IdParamSchema, 'params'), h(assignments.get));
+  r.put('/component-assignments/:id', write, validate(IdParamSchema, 'params'), validate(AssignmentUpdateSchema), h(assignments.update));
+  r.post('/component-assignments/:id/revise', write, validate(IdParamSchema, 'params'), validate(AssignmentReviseSchema), h(assignments.revise));
+  r.delete('/component-assignments/:id', write, validate(IdParamSchema, 'params'), h(assignments.deactivate));
 
   // Periods — guarded flow: no manual status transitions (Prepare/Approve move the status)
   r.get('/periods', read, validate(PeriodQuerySchema, 'query'), h(periods.list));
@@ -95,7 +105,7 @@ export function buildPayrollRouter(): Router {
   r.post('/rates/hra-amounts/:id/revise', write, validate(IdParamSchema, 'params'), validate(HraAmountReviseSchema), h(hraAmounts.revise));
   r.delete('/rates/hra-amounts/:id', write, validate(IdParamSchema, 'params'), h(hraAmounts.deactivate));
 
-  // Next steps (docs §3): component-assignments, settings,
+  // Next steps (docs §3): settings,
   // payrolls (compute, preparation, withhold,
   // approve-run, mark-paid), period-attendance, period-deductions, manual-deductions, readiness,
   // reports, payslips, my-payslips, da-arrears, sls, retirement-leave-encashment, neft.
