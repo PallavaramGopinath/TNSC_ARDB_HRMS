@@ -110,7 +110,11 @@ async function lockOpen(trx: Tx, id: number, action: string) {
 
 export async function update(actor: Actor, id: number, i: PeriodInput) {
   await withAudit(actor, async (trx) => {
-    await lockOpen(trx, id, 'edited');
+    const p = await lockOpen(trx, id, 'edited');
+    // A rejected run is OPEN again and keeps its draft bills and entries, which belong to these dates.
+    const moved = p.payroll_type !== i.payrollType || p.month !== i.month || p.calendar_year !== i.calendarYear || p.from_date !== i.fromDate || p.to_date !== i.toDate;
+    if (moved && (await trx.selectFrom('payroll.payrolls').select('id').where('payroll_period_id', '=', id).executeTakeFirst()))
+      throw AppError.conflict('This period has pay bills; its type, month and dates cannot be changed');
     await assertBranch(trx, i.branchId);
     const fy = await fyFor(trx, i.fromDate);
     await assertNoClash(trx, i, fy.id, id);
@@ -141,6 +145,70 @@ export async function setWorkingDays(actor: Actor, id: number, workingDays: numb
   return get(id);
 }
 
+/** Next month's SALARY period, under Head Office (TNCU EnsureOpenSalaryPeriodAsync). */
+async function ensureNextSalaryPeriod(trx: Tx, actor: Actor, p: { month: number; calendar_year: number }): Promise<number> {
+  const [nm, ny] = p.month >= 12 ? [1, p.calendar_year + 1] : [p.month + 1, p.calendar_year];
+  const existing = await trx
+    .selectFrom('payroll.payroll_periods')
+    .select('id')
+    .where('payroll_type', '=', 'SALARY')
+    .where('month', '=', nm)
+    .where('calendar_year', '=', ny)
+    .orderBy('id')
+    .executeTakeFirst();
+  if (existing) return existing.id;
+
+  const ho = await trx.selectFrom('core.branches').select('id').where('type', '=', 'HO').orderBy('is_active', 'desc').executeTakeFirst();
+  if (!ho) throw AppError.conflict('No Head Office branch is configured; a SALARY period needs an HO anchor branch');
+  const { from, to } = monthBounds(ny, nm);
+  const fy = await fyFor(trx, from).catch(() => {
+    throw AppError.conflict(`No open financial year covers ${from}. Create it before opening the next payroll month.`);
+  });
+  const da = await daRates.rateOn(to);
+  const row = await trx
+    .insertInto('payroll.payroll_periods')
+    .values({
+      month: nm, calendar_year: ny, from_date: from, to_date: to, payroll_type: 'SALARY', payroll_status: 'OPEN',
+      da_rate: da?.percentage ?? 0, is_active: true, branch_id: ho.id, financial_year_id: fy.id, created_by: actorName(actor),
+    })
+    .returning('id')
+    .executeTakeFirstOrThrow();
+  return row.id;
+}
+
+/**
+ * The SALARY period to work on (spec 08 §3.3): the earliest not LOCKED, else the month after the latest LOCKED
+ * one, which is opened. Two users opening the page together wait for each other on the latest period's row.
+ */
+export async function resolveActive(actor: Actor) {
+  const earliest = (c: Tx | typeof db) =>
+    c
+      .selectFrom('payroll.payroll_periods')
+      .select('id')
+      .where('payroll_type', '=', 'SALARY')
+      .where('is_active', '=', true)
+      .where('payroll_status', '<>', 'LOCKED')
+      .orderBy('from_date')
+      .orderBy('id')
+      .executeTakeFirst();
+  const open = await earliest(db);
+  if (open) return get(open.id);
+  const id = await withAudit(actor, async (trx) => {
+    const last = await trx
+      .selectFrom('payroll.payroll_periods')
+      .select(['id', 'month', 'calendar_year'])
+      .where('payroll_type', '=', 'SALARY')
+      .where('payroll_status', '=', 'LOCKED')
+      .orderBy('from_date', 'desc')
+      .limit(1)
+      .forUpdate()
+      .executeTakeFirst();
+    if (!last) throw AppError.conflict('No SALARY payroll period exists yet. Create the first month in Payroll Periods before preparing payroll.');
+    return (await earliest(trx))?.id ?? ensureNextSalaryPeriod(trx, actor, last);
+  });
+  return get(id);
+}
+
 /** Lock an APPROVED SALARY period and make sure next month's SALARY period exists (TNCU LockAndOpenNextAsync). */
 export async function lockAndOpenNext(actor: Actor, id: number) {
   const nextId = await withAudit(actor, async (trx) => {
@@ -165,34 +233,7 @@ export async function lockAndOpenNext(actor: Actor, id: number) {
       .where('id', '=', id)
       .execute();
 
-    // Ensure next month's SALARY period at HO (TNCU EnsureOpenSalaryPeriodAsync).
-    const [nm, ny] = p.month >= 12 ? [1, p.calendar_year + 1] : [p.month + 1, p.calendar_year];
-    const existing = await trx
-      .selectFrom('payroll.payroll_periods')
-      .select('id')
-      .where('payroll_type', '=', 'SALARY')
-      .where('month', '=', nm)
-      .where('calendar_year', '=', ny)
-      .orderBy('id')
-      .executeTakeFirst();
-    if (existing) return existing.id;
-
-    const ho = await trx.selectFrom('core.branches').select('id').where('type', '=', 'HO').orderBy('is_active', 'desc').executeTakeFirst();
-    if (!ho) throw AppError.conflict('No Head Office branch is configured; a SALARY period needs an HO anchor branch');
-    const { from, to } = monthBounds(ny, nm);
-    const fy = await fyFor(trx, from).catch(() => {
-      throw AppError.conflict(`No open financial year covers ${from}. Create it before opening the next payroll month.`);
-    });
-    const da = await daRates.rateOn(to);
-    const row = await trx
-      .insertInto('payroll.payroll_periods')
-      .values({
-        month: nm, calendar_year: ny, from_date: from, to_date: to, payroll_type: 'SALARY', payroll_status: 'OPEN',
-        da_rate: da?.percentage ?? 0, is_active: true, branch_id: ho.id, financial_year_id: fy.id, created_by: actorName(actor),
-      })
-      .returning('id')
-      .executeTakeFirstOrThrow();
-    return row.id;
+    return ensureNextSalaryPeriod(trx, actor, p);
   });
   return { locked: await get(id), next: await get(nextId) };
 }

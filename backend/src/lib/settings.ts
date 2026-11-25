@@ -1,5 +1,6 @@
 import { db } from '../config/db';
 import { businessDate } from './dates';
+import type { Tx } from './dbContext';
 
 /**
  * Effective-dated rule values from core.app_settings (ARDB D9).
@@ -14,7 +15,14 @@ export async function getSetting<T>(key: string, fallback: T, onDate: string = b
   const hit = cache.get(ck);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.value as T;
 
-  const row = await db
+  const value = await readSetting(db, key, fallback, onDate);
+  cache.set(ck, { at: Date.now(), value });
+  return value;
+}
+
+/** Same, without the cache: for payroll runs, where a setting changed a moment ago must count. */
+export async function readSetting<T>(c: Tx | typeof db, key: string, fallback: T, onDate: string): Promise<T> {
+  const row = await c
     .selectFrom('core.app_settings')
     .select('value')
     .where('key', '=', key)
@@ -22,10 +30,7 @@ export async function getSetting<T>(key: string, fallback: T, onDate: string = b
     .where((eb) => eb.or([eb('effective_to', 'is', null), eb('effective_to', '>=', onDate)]))
     .orderBy('effective_from', 'desc')
     .executeTakeFirst();
-
-  const value = (row?.value ?? fallback) as T;
-  cache.set(ck, { at: Date.now(), value });
-  return value;
+  return (row?.value ?? fallback) as T;
 }
 
 export const clearSettingsCache = () => cache.clear();

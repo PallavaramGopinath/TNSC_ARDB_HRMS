@@ -233,7 +233,7 @@ describe.skipIf(!url)('component assignments API', () => {
     });
   });
 
-  it('feeds the allowance preview: PP and GP in force on the period end', async () => {
+  it('feeds the allowance preview: PP and GP, shared by days when they change within the month (spec 08 Q4)', async () => {
     const nov = await addPeriod(11);
     const pay = async () => {
       const e = (await call('get', `/periods/${nov}/allowances`)).body.employees.find((x: { employeeId: number }) => x.employeeId === emp);
@@ -242,11 +242,11 @@ describe.skipIf(!url)('component assignments API', () => {
     expect(await pay()).toEqual([20000, 0, 0, 20000]);
     const pp = (await add('PP', 500)).body;
     await add('GP', 2000, '2026-11-16');
-    expect(await pay()).toEqual([20000, 500, 2000, 22500]);
+    expect(await pay()).toEqual([20000, 500, 1000, 21500]); // GP for 15 of 30 days
     await call('post', `${PATH}/${pp.id}/revise`, body(750, '2026-11-01'));
-    expect(await pay()).toEqual([20000, 750, 2000, 22750]);
+    expect(await pay()).toEqual([20000, 750, 1000, 21750]);
     const cur = (await call('get', `${PATH}?employeeId=${emp}&componentId=${comp.PP}&status=CURRENT&asOn=2026-11-30`)).body.items[0];
     await call('delete', `${PATH}/${cur.id}`);
-    expect(await pay()).toEqual([20000, 0, 2000, 22000]);
+    expect(await pay()).toEqual([20000, 0, 1000, 21000]);
   });
 });

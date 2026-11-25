@@ -1,6 +1,6 @@
 # Requirement: Allowance calculation (DA, HRA, CCA, MA)
 
-**Status:** Implemented (masters, HRA method, calculation engine, preview). Payroll Preparation is not built; see §15.
+**Status:** Implemented (masters, HRA method, calculation engine, preview). Payroll Preparation: spec 08.
 **Area:** Payroll → monthly salary calculation ("Prepare") and Payroll → Masters
 **Date:** 25-Nov-2026
 
@@ -246,4 +246,4 @@ Example 4 has exactly 50 paise in DA, which rounds up.
 
 **To start using it:** enter the DA rate and the HRA amounts (checked against the original settlement), then choose "Fixed amount by designation and place" in Administration › Rule Settings.
 
-**Still to do when Payroll Preparation is built:** block finalisation on ERROR issues; store the applied row ids (already returned as `applied`) on the pay line; loss of pay; part-month joiners and leavers (warned about now); increments within the month. PP and GP are entered on Payroll › Masters › Component Assignments; without an assignment they show as 0.
+**Done with Payroll Preparation (spec 08):** ERROR issues block approval; the applied rows are stored on the pay line; loss of pay, part-month joiners and leavers, and assignments changed within the month (§10 Q2, Q3, Q6 and Q8 are answered in spec 08 §14). Increments within the month are still to do. PP and GP are entered on Payroll › Masters › Component Assignments; without an assignment they show as 0.

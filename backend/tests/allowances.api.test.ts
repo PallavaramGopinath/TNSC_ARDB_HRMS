@@ -304,7 +304,8 @@ describe.skipIf(!url)('allowances API', () => {
       await addEmployee('LATER', des.assistant, branch.GCC, 22500, '2026-12-01');
       const { body, row } = await preview(await addPeriod(11));
       expect(body).toMatchObject({ employeeCount: 1, ready: true });
-      expect(row('NEW').issues).toEqual([{ code: 'PART_MONTH', severity: 'WARNING', message: 'Joined on 2026-11-16; full-month amounts are shown' }]);
+      expect(row('NEW').issues).toEqual([{ code: 'PART_MONTH', severity: 'WARNING', message: 'Joined on 2026-11-16; paid for 15 of 30 days' }]);
+      expect(amounts(row('NEW'))).toEqual([22500, 3418, 1500, 563, 500, 5981]); // half of each, to Re. 1
       expect((await call('get', `/periods/${await addPeriod(11, 'BONUS')}/allowances`)).status).toBe(400);
       expect((await call('get', '/periods/999999/allowances')).status).toBe(404);
     });

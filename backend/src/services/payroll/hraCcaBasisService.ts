@@ -9,7 +9,7 @@ import { db } from '../../config/db';
 import { addDays, businessDate } from '../../lib/dates';
 import { actorName, withAudit, type Actor, type Tx } from '../../lib/dbContext';
 import { AppError } from '../../lib/errors';
-import { clearSettingsCache, getSetting } from '../../lib/settings';
+import { clearSettingsCache, getSetting, readSetting } from '../../lib/settings';
 import type { HraCcaBasis, HraMethod } from '../../models/db.types';
 import { logActivity } from '../core/activityLogService';
 import { basisChangeWindow, HRA_CCA_BASIS_KEY, methodLabel, parseMethod, type PeriodState } from './hraCcaRules';
@@ -23,9 +23,9 @@ async function periodStates(trx: Tx | typeof db = db): Promise<PeriodState[]> {
   return r.rows;
 }
 
-/** Method in force on a date (default: business date). Payroll uses the period's end date. */
-export async function methodOn(date: string = businessDate()): Promise<HraMethod> {
-  return parseMethod(await getSetting<string>(HRA_CCA_BASIS_KEY, 'PLACE', date));
+/** Method in force on a date (default: business date). Payroll uses the period's end date, read uncached on `c`. */
+export async function methodOn(date: string = businessDate(), c?: Tx | typeof db): Promise<HraMethod> {
+  return parseMethod(c ? await readSetting<string>(c, HRA_CCA_BASIS_KEY, 'PLACE', date) : await getSetting<string>(HRA_CCA_BASIS_KEY, 'PLACE', date));
 }
 
 /** Date from which a method change would apply: the next payroll period to be processed. */

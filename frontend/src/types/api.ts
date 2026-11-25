@@ -266,6 +266,119 @@ export interface PayrollPeriod {
   approved_at: string | null;
   locked_by: string | null;
   locked_at: string | null;
+  /** Last reject or reversed approval; cleared by the next Prepare. */
+  returned_by: string | null;
+  returned_at: string | null;
+  return_reason: string | null;
+}
+
+// ---------------------------------------------------------------- Payroll Preparation (specs/08)
+export interface BillIssue { code: string; severity: 'ERROR' | 'WARNING'; message: string }
+export type BillStatus = 'DRAFT' | 'APPROVED' | 'PAID';
+export type BillColumn =
+  | 'basic' | 'pp' | 'gp' | 'sp' | 'pay' | 'da' | 'hra' | 'cca' | 'ma' | 'employerPf' | 'otherEarnings' | 'pf' | 'vpf' | 'otherDeductions';
+
+interface PayBillHeader {
+  id: number;
+  employee_id: number;
+  employee_code: string;
+  employee_name: string;
+  designation_name: string;
+  branch_id: number;
+  branch_name: string;
+  working_days: string;
+  service_days: string | null;
+  payable_days: string;
+  gross_earnings: string;
+  total_deductions: string;
+  net_salary: string;
+  payroll_status: BillStatus;
+  is_withheld: boolean;
+  withhold_reason: string | null;
+  issues: BillIssue[];
+}
+export interface PayBill extends PayBillHeader { amounts: Record<BillColumn, string> }
+export interface PayBillDetail extends PayBillHeader {
+  lines: Array<{ id: number; component_code: string; component_name: string; allowance_amount: string; deduction_amount: string }>;
+}
+export interface PayrollRunGrid {
+  period: PayrollPeriod;
+  bills: PayBill[];
+  changed: Array<{ employeeId: number; employeeCode: string; employeeName: string }>;
+  summary: Record<'paid' | 'pending' | 'withheld', { count: number; net: string }>;
+}
+export interface PrepareResult { bills: number; lines: number; errors: number; warnings: number }
+
+export interface PayrollReadiness {
+  attendance: { status: 'NOT_UPLOADED' | 'PARTIAL' | 'UPLOADED'; entered: number; total: number; firstUploadedAt: string | null };
+  agencies: Array<{ componentId: number; code: string; name: string; uploaded: number; eligible: number; amount: string; employees: number; firstUploadedAt: string | null }>;
+  message: string;
+}
+
+export interface PeriodAttendanceRow {
+  employeeId: number;
+  employeeCode: string;
+  employeeName: string;
+  branch: string;
+  serviceDays: number;
+  saved: boolean;
+  headQuarters: number;
+  camp: number;
+  remarks: string;
+  leaves: Record<number, number>;
+}
+export interface PeriodAttendance {
+  editable: boolean;
+  totalDays: number;
+  leaveTypes: Array<{ id: number; code: string; name: string; payCutFactor: string; cutsSpecialPayAndDa: boolean }>;
+  rows: PeriodAttendanceRow[];
+}
+export type ImportAction = 'NEW' | 'OVERWRITE' | 'REMOVE' | 'UNCHANGED';
+interface ImportRow { line: number; code: string; name: string; action: ImportAction | null; error: string | null }
+export interface ImportResult<R extends ImportRow = ImportRow> {
+  total: number;
+  added: number;
+  overwritten: number;
+  removed: number;
+  unchanged: number;
+  errors: number;
+  imported: number;
+  rows: R[];
+}
+export type AttendanceSheetImport = ImportResult;
+export type DeductionSheetImport = ImportResult<ImportRow & { previous: string | null; amount: string | null; assigned: string | null; waived: boolean }>;
+
+export interface PeriodDeductionRow {
+  employeeId: number;
+  employeeCode: string;
+  employeeName: string;
+  branch: string;
+  componentId: number;
+  componentCode: string;
+  componentName: string;
+  assigned: string;
+  /** null = no entry: the assigned amount applies. 0 = waived. */
+  amount: string | null;
+  remarks: string;
+  previous: string | null;
+}
+export interface PeriodDeductions {
+  editable: boolean;
+  period: { month: number; calendarYear: number };
+  components: Array<{ id: number; code: string; name: string }>;
+  rows: PeriodDeductionRow[];
+}
+
+export interface ManualDeductions {
+  editable: boolean;
+  employeeCode: string;
+  employeeName: string;
+  branch: string;
+  gross: string;
+  net: string;
+  minimumNet: string;
+  minNetPercent: string;
+  rows: Array<{ componentId: number; componentCode: string; componentName: string; calculated: string | null; override: string | null; remarks: string; applies: boolean }>;
 }
 
 // ---------------------------------------------------------------- HRA & CCA rates (specs/01)

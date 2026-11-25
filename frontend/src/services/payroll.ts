@@ -2,8 +2,10 @@ import { api } from './api';
 import type {
   AllowancePreview,
   AssignedType,
+  AttendanceSheetImport,
   ComponentAssignmentDetail,
   ComponentAssignmentList,
+  DeductionSheetImport,
   EffectiveRate,
   HraAmount,
   HraAmountDetail,
@@ -13,9 +15,16 @@ import type {
   HraCcaRateDetail,
   HraCcaRateList,
   HraMethod,
+  ManualDeductions,
   RateCoverage,
+  PayBillDetail,
   PayrollComponent,
   PayrollPeriod,
+  PayrollReadiness,
+  PayrollRunGrid,
+  PeriodAttendance,
+  PeriodDeductions,
+  PrepareResult,
 } from '@/types/api';
 
 export interface PayrollComponentInput {
@@ -105,8 +114,56 @@ export const payrollApi = {
       api.put<PayrollPeriod>(`/payroll/periods/${id}/working-days`, { workingDays }).then((r) => r.data),
     lockAndRoll: (id: number) =>
       api.post<{ locked: PayrollPeriod; next: PayrollPeriod }>(`/payroll/periods/${id}/lock-and-roll`).then((r) => r.data),
+    resolveActive: () => api.post<PayrollPeriod>('/payroll/periods/resolve-active').then((r) => r.data),
+    reject: (id: number, reason: string) => api.post<PayrollPeriod>(`/payroll/periods/${id}/reject`, { reason }).then((r) => r.data),
+    reverseApproval: (id: number, reason: string) => api.post<PayrollPeriod>(`/payroll/periods/${id}/reverse-approval`, { reason }).then((r) => r.data),
+  },
+  /** Payroll Preparation (specs/08). `confirm…` answers a 409 that asked the user first. */
+  preparation: {
+    grid: (periodId: number) => api.get<PayrollRunGrid>(`/payroll/payrolls/preparation/${periodId}`).then((r) => r.data),
+    bill: (id: number) => api.get<PayBillDetail>(`/payroll/payrolls/${id}`).then((r) => r.data),
+    readiness: (periodId: number) => api.get<PayrollReadiness>(`/payroll/readiness/${periodId}`).then((r) => r.data),
+    prepare: (periodId: number, confirmAttendance: boolean) =>
+      api.post<PrepareResult>('/payroll/payrolls/compute', { periodId, confirmAttendance }).then((r) => r.data),
+    approve: (periodId: number) => api.post<PayrollPeriod>('/payroll/payrolls/approve-run', { periodId }).then((r) => r.data),
+    withhold: (id: number, withheld: boolean, reason?: string) =>
+      api.put<PayBillDetail>(`/payroll/payrolls/${id}/withhold`, { withheld, reason }).then((r) => r.data),
+  },
+  periodAttendance: {
+    get: (periodId: number) => api.get<PeriodAttendance>(`/payroll/period-attendance/${periodId}`).then((r) => r.data),
+    save: (periodId: number, body: { entries: AttendanceEntry[]; confirm: boolean }) =>
+      api.put<{ saved: number; removed: number }>(`/payroll/period-attendance/${periodId}`, body).then((r) => r.data),
+    import: (periodId: number, body: { headers: string[]; rows: Array<{ line: number; code: string; values: string[] }>; dryRun: boolean; confirm: boolean }) =>
+      api.post<AttendanceSheetImport>(`/payroll/period-attendance/${periodId}/import`, body).then((r) => r.data),
+  },
+  periodDeductions: {
+    get: (periodId: number) => api.get<PeriodDeductions>(`/payroll/period-deductions/${periodId}`).then((r) => r.data),
+    save: (periodId: number, body: { entries: DeductionEntry[]; confirm: boolean }) =>
+      api.put<{ saved: number; removed: number }>(`/payroll/period-deductions/${periodId}`, body).then((r) => r.data),
+    import: (periodId: number, body: { componentId: number; sheetCode: string | null; rows: Array<{ line: number; code: string; amount: string }>; dryRun: boolean; confirm: boolean }) =>
+      api.post<DeductionSheetImport>(`/payroll/period-deductions/${periodId}/import`, body).then((r) => r.data),
+  },
+  manualDeductions: {
+    get: (periodId: number, employeeId: number) => api.get<ManualDeductions>(`/payroll/manual-deductions/${periodId}/${employeeId}`).then((r) => r.data),
+    save: (periodId: number, employeeId: number, entries: Array<{ componentId: number; amount: number | null; remarks: string }>) =>
+      api.put<PrepareResult>(`/payroll/manual-deductions/${periodId}/${employeeId}`, { entries }).then((r) => r.data),
   },
 };
+
+export interface AttendanceEntry {
+  employeeId: number;
+  headQuarters: number;
+  camp: number;
+  remarks: string;
+  leaves: Array<{ leaveTypeId: number; days: number }>;
+}
+
+export interface DeductionEntry {
+  employeeId: number;
+  componentId: number;
+  amount: number | null;
+  remarks: string;
+}
 
 export interface PeriodInput {
   payrollType: string;

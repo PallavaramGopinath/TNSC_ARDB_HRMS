@@ -441,14 +441,94 @@ export interface PayrollPeriodTable {
   approved_at: Timestamp | null;
   locked_by: string | null;
   locked_at: Timestamp | null;
+  returned_by: string | null;
+  returned_at: Timestamp | null;
+  return_reason: string | null;
 }
 
 export interface PayrollTable {
   id: Generated<number>;
   payroll_period_id: number;
   employee_id: number;
-  payroll_status: string;
+  /** Calendar days of the period. */
+  working_days: Numeric | null;
+  service_days: Numeric | null;
+  payable_days: Numeric | null;
+  gross_earnings: Numeric;
+  total_deductions: Numeric;
+  net_salary: Numeric;
+  payroll_status: Generated<'DRAFT' | 'APPROVED' | 'PAID'>;
   is_withheld: Generated<boolean>;
+  withhold_reason: string | null;
+  pay_type: Generated<string>;
+  paid_on: DateStr | null;
+  paid_by: string | null;
+  payment_reference: string | null;
+  branch_id: number;
+  financial_year_id: number;
+  issues: ColumnType<Array<{ code: string; severity: 'ERROR' | 'WARNING'; message: string }>, string | undefined, string>;
+  created_by: string;
+  created_at: Generated<Timestamp>;
+  approved_by: string | null;
+  approved_at: Timestamp | null;
+}
+
+export interface PayrollDetailTable {
+  id: Generated<number>;
+  payroll_id: number;
+  employee_id: number;
+  component_id: number;
+  allowance_amount: Numeric;
+  deduction_amount: Numeric;
+  is_active: Generated<boolean>;
+  branch_id: number | null;
+  financial_year_id: number | null;
+  remarks: string | null;
+  applied: ColumnType<unknown, string | null | undefined, string | null>;
+}
+
+export interface PayrollPeriodAttendanceTable {
+  id: Generated<number>;
+  payroll_period_id: number;
+  employee_id: number;
+  total_days_in_month: number;
+  total_working_days: number;
+  head_quarters: Generated<number>;
+  camp: Generated<number>;
+  remarks: string | null;
+  branch_id: number | null;
+  financial_year_id: number | null;
+  created_by: string;
+  created_at: Generated<Timestamp>;
+}
+
+export interface PayrollPeriodAttendanceLeaveTable {
+  id: Generated<number>;
+  payroll_period_attendance_id: number;
+  leave_type_id: number;
+  days: number;
+}
+
+export interface PayrollPeriodDeductionTable {
+  id: Generated<number>;
+  payroll_period_id: number;
+  employee_id: number;
+  component_id: number;
+  amount: Numeric;
+  remarks: string | null;
+  created_by: string;
+  created_at: Generated<Timestamp>;
+}
+
+export interface PayrollManualDeductionOverrideTable {
+  id: Generated<number>;
+  payroll_period_id: number;
+  employee_id: number;
+  component_id: number;
+  override_amount: Numeric;
+  remarks: string | null;
+  created_by: string;
+  created_at: Generated<Timestamp>;
 }
 
 // ---------------------------------------------------------------- payroll
@@ -517,6 +597,11 @@ export interface Database {
   'payroll.payroll_hra_amounts': PayrollHraAmountTable;
   'payroll.payroll_component_assignments': PayrollComponentAssignmentTable;
   'payroll.payrolls': PayrollTable;
+  'payroll.payroll_details': PayrollDetailTable;
+  'payroll.payroll_period_attendances': PayrollPeriodAttendanceTable;
+  'payroll.payroll_period_attendance_leaves': PayrollPeriodAttendanceLeaveTable;
+  'payroll.payroll_period_deductions': PayrollPeriodDeductionTable;
+  'payroll.payroll_manual_deduction_overrides': PayrollManualDeductionOverrideTable;
 }
 
 export type Employee = Selectable<EmployeeTable>;
