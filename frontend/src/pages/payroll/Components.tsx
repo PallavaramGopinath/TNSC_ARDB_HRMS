@@ -11,11 +11,11 @@ import { Modal } from '@/components/ui/Modal';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { useAuth } from '@/hooks/useAuth';
 import { formatINR } from '@/lib/format';
+import { COMPONENT_TYPE } from '@/lib/payrollComponents';
 import { errorMessage, fieldErrors } from '@/services/api';
 import { payrollApi, type PayrollComponentInput } from '@/services/payroll';
 import type { PayrollComponent } from '@/types/api';
 
-const TYPE = { 1: ['Earnings', 'success'], 2: ['Deductions', 'warning'], 3: ['Loan deductions', 'danger'] } as const;
 const col = createColumnHelper<PayrollComponent>();
 
 const Tick = ({ on }: { on: boolean }) => (on ? <Check size={16} className="text-success-600" aria-label="Yes" /> : <span className="text-ink-300" aria-label="No">—</span>);
@@ -56,7 +56,7 @@ export function ComponentsPage() {
         ),
       }),
       col.accessor('component_name', { header: 'Name' }),
-      col.accessor('component_type', { header: 'Type', cell: (c) => <Badge tone={TYPE[c.getValue()][1]}>{TYPE[c.getValue()][0]}</Badge> }),
+      col.accessor('component_type', { header: 'Type', cell: (c) => <Badge tone={COMPONENT_TYPE[c.getValue()][1]}>{COMPONENT_TYPE[c.getValue()][0]}</Badge> }),
       col.accessor('is_da_applicable', { header: 'DA base', cell: (c) => <Tick on={c.getValue()} /> }),
       col.accessor('is_surrender_leave_applicable', { header: 'SLS base', cell: (c) => <Tick on={c.getValue()} /> }),
       col.accessor('is_income_tax_applicable', { header: 'Taxable', cell: (c) => <Tick on={c.getValue()} /> }),
