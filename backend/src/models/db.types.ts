@@ -408,10 +408,14 @@ export interface PayrollComponentAssignmentTable {
   component_id: number;
   assigned_type: 'FIXED' | 'PERCENTAGE';
   assigned_amount: Numeric;
+  percentage: Numeric;
+  minimum_amount: Numeric;
+  maximum_amount: Numeric;
   effective_from: DateStr | null;
   effective_to: DateStr | null;
   is_active: Generated<boolean>;
   created_by: string;
+  created_at: Generated<Timestamp>;
 }
 
 export interface PayrollPeriodTable {

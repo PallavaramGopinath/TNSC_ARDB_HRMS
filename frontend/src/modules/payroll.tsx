@@ -7,6 +7,7 @@ export const payrollModule: FrontendModule = {
   routes: [
     { path: '/payroll/periods', element: lazy(() => import('@/pages/payroll/Periods').then((m) => ({ default: m.PeriodsPage }))) },
     { path: '/payroll/components', element: lazy(() => import('@/pages/payroll/Components').then((m) => ({ default: m.ComponentsPage }))) },
+    { path: '/payroll/components/assignments', element: lazy(() => import('@/pages/payroll/ComponentAssignments').then((m) => ({ default: m.ComponentAssignmentsPage }))) },
     { path: '/payroll/rates/pf', element: lazy(() => import('@/pages/payroll/PfRates').then((m) => ({ default: m.PfRatesPage }))) },
     { path: '/payroll/rates/hra-cca', element: lazy(() => import('@/pages/payroll/HraCcaRates').then((m) => ({ default: m.HraCcaRatesPage }))) },
     { path: '/payroll/rates/hra-amounts', element: lazy(() => import('@/pages/payroll/HraAmounts').then((m) => ({ default: m.HraAmountsPage }))) },
