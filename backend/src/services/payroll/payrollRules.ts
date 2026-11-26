@@ -303,7 +303,7 @@ export function computeBill(i: BillInput): Bill {
       vpf.assignedType === 'FIXED' ? D(vpf.amount)
       : vpfBase.gt(0) ? clamp(roundRupee(vpfBase.times(served).div(days).times(vpf.percentage).div(100)), vpf.minAmount, vpf.maxAmount)
       : ZERO;
-    deduct(vpf.component, amount, vpf.assignedType === 'FIXED' ? { assignmentId: vpf.id } : { assignmentId: vpf.id, base: vpfBase.toFixed(2) });
+    deduct(vpf.component, amount, vpf.assignedType === 'FIXED' ? { assignmentId: vpf.id } : { assignmentId: vpf.id, percentage: String(vpf.percentage), base: vpfBase.toFixed(2) });
   }
 
   const agencyIds = new Set<number>();

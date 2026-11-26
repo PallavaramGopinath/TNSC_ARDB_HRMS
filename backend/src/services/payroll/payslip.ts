@@ -103,6 +103,7 @@ export function buildPayslip(row: PayslipSourceRow, lines: PayslipSourceLine[], 
       case C.HouseRentAllowance: case C.CityCompensatoryAllowance: return segmentsBasis(applied);
       case C.MedicalAllowance: return ofDays(served);
       case C.ProvidentFund: return a.percentage !== undefined ? `${pct(a.percentage)} of ${inr(String(a.wages ?? 0))}` : '';
+      case C.VoluntaryProvidentFund: return a.percentage !== undefined && a.base !== undefined ? `${pct(a.percentage)} of ${inr(String(a.base))}${served.lt(calendar) ? ` · ${ofDays(served)}` : ''}` : '';
       case C.EmployerProvidentFund: return side === 'EARNING' ? 'Employer contribution' : 'Equal to PF';
       default: return a.uploaded === true ? 'Amount for the month' : '';
     }
