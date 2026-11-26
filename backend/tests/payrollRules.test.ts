@@ -156,12 +156,13 @@ describe('PF and VPF', () => {
     expect(codes(computeBill(base({ pfRate: { id: 1, percentage: '0' } })), 'WARNING')).toEqual(['PF_RATE']);
   });
   it('has no rule for a different employer PF', () => expect(codes(computeBill(base({ employerPfEqualsEmployee: false })), 'ERROR')).toEqual(['EMPLOYER_PF']));
-  it('VPF is fixed, or a percentage of Basic Pay not cut by loss of pay', () => {
+  it('VPF is fixed, or a percentage of Basic + SP + PP not cut by loss of pay', () => {
     const vpf = (a: PayAssignment, o: Partial<BillInput> = {}) => line(computeBill(base({ assignments: [...base().assignments, a], ...o })), 'ADL PF');
     expect(vpf(assign('ADL PF', 1234.5))).toBe(1234.5);
-    expect(vpf(pct('ADL PF', 10), { leave: [{ days: 5, factor: 1, cutsSpDa: true }] })).toBe(3270);
+    // 10% of 30,000 + 500 + 300 (GP is not in the base)
+    expect(vpf(pct('ADL PF', 10), { leave: [{ days: 5, factor: 1, cutsSpDa: true }] })).toBe(3080);
     expect(vpf(pct('ADL PF', 10, { maxAmount: 2000 }))).toBe(2000);
-    expect(vpf(pct('ADL PF', 10), { service: { from: '2026-06-16', to: JUNE.to } })).toBe(1635);
+    expect(vpf(pct('ADL PF', 10), { service: { from: '2026-06-16', to: JUNE.to } })).toBe(1540);
   });
 });
 

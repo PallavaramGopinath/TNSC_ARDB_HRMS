@@ -297,11 +297,13 @@ export function computeBill(i: BillInput): Bill {
   const lastDay = i.service.to;
   const vpf = assignmentOn(of(C.VoluntaryProvidentFund).filter((a) => a.component.isActive), lastDay);
   if (vpf) {
+    // A percentage VPF is on Basic + SP + PP as assigned, not cut for unpaid days.
+    const vpfBase = basic.plus(sp).plus(pp);
     const amount =
       vpf.assignedType === 'FIXED' ? D(vpf.amount)
-      : basicPay.gt(0) ? clamp(roundRupee(basicPay.times(served).div(days).times(vpf.percentage).div(100)), vpf.minAmount, vpf.maxAmount)
+      : vpfBase.gt(0) ? clamp(roundRupee(vpfBase.times(served).div(days).times(vpf.percentage).div(100)), vpf.minAmount, vpf.maxAmount)
       : ZERO;
-    deduct(vpf.component, amount, { assignmentId: vpf.id });
+    deduct(vpf.component, amount, vpf.assignedType === 'FIXED' ? { assignmentId: vpf.id } : { assignmentId: vpf.id, base: vpfBase.toFixed(2) });
   }
 
   const agencyIds = new Set<number>();
