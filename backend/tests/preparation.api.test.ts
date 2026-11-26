@@ -190,6 +190,37 @@ describe.skipIf(!url)('payroll preparation API', () => {
       expect(g.changed).toEqual([]);
     });
 
+    it('prints payslips: one employee with the basis of each line, a branch, or all; draft until approved', async () => {
+      const e = await addEmployee('E1');
+      await assign(e, 'BASIC', 20000);
+      await assign(e, 'SP', 700);
+      await assign(e, 'TLIC', 1200);
+      await addEmployee('E2');
+      const p = await addPeriod();
+      await call('put', `/period-attendance/${p}`, { entries: [{ employeeId: e, headQuarters: 18, camp: 2, leaves: [{ leaveTypeId: leave.LOP, days: 2 }] }] });
+      expect((await prepare(p)).body).toMatchObject({ bills: 2, errors: 0 });
+
+      const one = (await call('get', `/payrolls/preparation/${p}/payslips?employeeId=${e}`)).body;
+      expect(one).toMatchObject({ preparedBy: 'maker', period: { id: p } });
+      expect(one.slips).toHaveLength(1);
+      const s = one.slips[0];
+      expect(s).toMatchObject({ draft: true, employee: { code: 'E1', designation: 'Assistant', branch: 'Prep branch' } });
+      expect(s.attendance).toMatchObject({ calendarDays: 30, workingDays: 22, payDays: 28, lop: 2, hq: 18, camp: 2, entered: true, leaves: [{ code: 'LOP', days: 2 }] });
+      const basis = Object.fromEntries([...s.earnings, ...s.deductions].map((l: { label: string; basis: string }) => [l.label, l.basis]));
+      expect(basis).toMatchObject({ 'Basic Pay': '28/30 days', 'Special Pay': '28/30 days', 'Dearness Allowance': '30.38% · 28/30 days', 'House Rent Allowance': 'Fixed 3,000', 'Employer PF (Dr)': 'Equal to PF' });
+      expect(basis['Provident Fund']).toMatch(/^12% of /);
+      const sum = (list: Array<{ amount: string }>) => list.reduce((n, l) => n + Number(l.amount), 0).toFixed(2);
+      expect([sum(s.earnings), sum(s.deductions)]).toEqual([s.gross, s.deductionsTotal]);
+      expect(s.netInWords).toMatch(/^Rupees .* Only$/);
+
+      expect((await call('get', `/payrolls/preparation/${p}/payslips?branchId=${branchId}`)).body.slips).toHaveLength(2);
+      expect((await call('get', `/payrolls/preparation/${p}/payslips?employeeId=999999`)).status).toBe(404);
+      expect((await call('get', `/payrolls/preparation/${p}/payslips`, undefined, token.branch)).status).toBe(403);
+      expect((await approve(p)).status).toBe(200);
+      const all = (await call('get', `/payrolls/preparation/${p}/payslips`)).body.slips;
+      expect(all.map((x: { draft: boolean; approvedBy: string }) => [x.draft, x.approvedBy])).toEqual([[false, 'checker'], [false, 'checker']]);
+    });
+
     it('gives the same bills twice, and keeps entries, edits and withheld marks', async () => {
       const e = await addEmployee('E1');
       await assign(e, 'TLIC', 1200);

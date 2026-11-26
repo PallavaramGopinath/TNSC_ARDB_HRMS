@@ -617,3 +617,39 @@ export interface AttendanceImportResult {
   unchanged: number;
   errors: Array<{ line: number; code: string; date: string; message: string }>;
 }
+/** Individual pay bill (payslip, specs/08 §4.7). */
+export interface PayslipLine { code: string; label: string; basis: string; amount: string }
+export interface Payslip {
+  payrollId: number;
+  employeeId: number;
+  status: 'DRAFT' | 'APPROVED' | 'PAID' | string;
+  draft: boolean;
+  withheld: boolean;
+  withholdReason: string | null;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  employee: {
+    code: string; name: string; designation: string; grade: string | null; scaleOfPay: string | null; branch: string;
+    epfNumber: string | null; pan: string | null; dateOfJoining: string | null; dateOfRetirement: string | null;
+    bank: string | null; account: string | null; ifsc: string | null;
+  };
+  attendance: {
+    calendarDays: number; workingDays: number | null; serviceDays: number; payDays: number; lop: number;
+    hq: number | null; camp: number | null; remarks: string | null; entered: boolean;
+    leaves: Array<{ code: string; name: string; days: number }>;
+  };
+  earnings: PayslipLine[];
+  deductions: PayslipLine[];
+  gross: string;
+  deductionsTotal: string;
+  net: string;
+  netInWords: string;
+}
+export interface PayslipReport {
+  organisation: { name: string; short: string; address: string };
+  period: PayrollPeriod;
+  generatedAt: string;
+  generatedBy: string;
+  preparedBy: string | null;
+  slips: Payslip[];
+}
