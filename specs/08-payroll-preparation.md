@@ -387,7 +387,7 @@ PF       = RoundRupee(PF wages × PF% / 100)
 
 ### 7.8 VPF and EPF
 
-- **VPF (`ADL PF`):** assigned amount, or % of payBase. Not reduced for unpaid days.
+- **VPF (`ADL PF`):** assigned amount, or `RoundRupee((Basic + SP + PP) × % / 100)`, clamped to the assignment's min and max. GP is not in the base. Prorated for days of service, not reduced for unpaid days.
 - **EPF** (Foreign Service Officers): the assigned amount, or the PF % on PF wages. For fixed-pay officers the base is the assigned Basic + GP + SP + DA. An equal employer line is added.
 
 ### 7.9 Other deductions
