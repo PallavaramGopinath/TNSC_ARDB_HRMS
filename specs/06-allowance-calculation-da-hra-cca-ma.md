@@ -151,7 +151,7 @@ Example 4 has exactly 50 paise in DA, which rounds up.
 3. **DA base under loss of pay:** is DA calculated on full Basic Pay and then prorated (existing rule), or on the Basic Pay actually paid? Personal Pay now counts for DA but is prorated with Basic and Grade Pay, not with DA.
 4. **Transfer or promotion within the month:** the existing rule splits HRA and CCA by days. Confirm the split applies to the fixed HRA amounts and to the CCA minimum and maximum.
 5. **Special Pay:** confirm it is excluded from DA and CCA. The current reference rules include it.
-6. **PF and voluntary PF:** the reference PF wage is Basic + GP + SP + DA, Should PF follow the new Basic Pay (with PP, without SP)? This document does not change it. *Resolved for voluntary PF:* its percentage base is Basic + SP + PP (spec 08 §7.8).
+6. **PF and voluntary PF:** the reference PF wage is Basic + GP + SP + DA, Should PF follow the new Basic Pay (with PP, without SP)? This document does not change it. *Resolved for voluntary PF:* its percentage base is Basic + SP + PP + DA (spec 08 §7.8).
 7. **"Pay Band" and "Basic Pay":** S 3 applies the 0.07% to the "Pay Band". Confirm this means BASIC + PP + GP.
 8. **General Managers and the Managing Director** are outside the settlement. Which rules apply if they are paid through this system?
 9. **Designation names:** confirm the full names of DO, AO and ADO. Confirm HRA for pay-band categories not named in S 7: Manager (Accounts), Editor, A.E, and the selection grades of ADO, A.E, Superintendent, Assistant and Driver.
