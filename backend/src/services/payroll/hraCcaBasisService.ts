@@ -136,13 +136,14 @@ export async function status() {
     effectiveFrom: window.effectiveFrom,
     canChange: window.canChange,
     blockedReason: window.blockedReason,
+    reprepare: window.reprepare,
     rateCounts: { PLACE: countOf('PLACE'), DESIGNATION: countOf('DESIGNATION'), FIXED_AMOUNT: Number(amounts.n) },
     lastChangedBy: row ? (row.updated_by ?? row.created_by) : null,
     lastChangedAt: row ? (row.updated_at ?? row.created_at) : null,
   };
 }
 
-/** Change the HRA method from the next payroll period (spec §4.4). 409 while a payroll run is open. */
+/** Change the HRA method from the next payroll period (spec §4.4). 409 while a payroll run is approved but not locked. */
 export async function change(actor: Actor, method: HraMethod) {
   await withAudit(actor, async (trx) => {
     const window = basisChangeWindow(await periodStates(trx), businessDate());

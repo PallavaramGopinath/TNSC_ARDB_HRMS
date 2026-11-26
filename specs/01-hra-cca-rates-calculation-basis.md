@@ -168,7 +168,7 @@ CCA = round(CCA_base(E, P) × row.cca_percent / 100)
 
 ### 4.4 Switching basis
 
-* Allowed only when **no payroll run is open (unfinalised)** for the organisation.
+* Allowed only when **no payroll run is approved and not yet locked**. A run that is prepared but not approved does not block; it must be prepared again before it can be approved (changed by spec 06, see §15 D8 there).
 * Takes effect from the **next payroll period** to be processed. Finalised periods are never recalculated.
 * Rates of the old basis are **retained** (history, arrears and audit), but are ignored by the resolver while the other basis is active.
 * Before saving, the system shows a coverage check: "Under DESIGNATION basis, 3 of 18 designations with active employees have no current rate." The admin may still save, but payroll validation (§4.3) will flag those employees.
@@ -374,7 +374,7 @@ How the spec was fitted to this codebase:
 | `hra_percent`, `cca_percent` | Real columns are `hra_percentage`, `cca_percentage`, plus the existing `hra_/cca_minimum_amount` and `hra_/cca_maximum_amount` (max 0 = no cap). The caps apply to both bases, which answers §11 Q2. |
 | §3.2 DDL | `database/migrations/0003_hra_cca_rate_basis.sql`. Overlaps are blocked by `btree_gist` exclusion constraints as well as the service check. Migrations are forward-only here, so there is no down-migration. |
 | Permissions | Mapped to roles: `ORG_SETTINGS_EDIT` → Admin; `HRA_CCA_RATE_VIEW` → HR, Payroll; `HRA_CCA_RATE_EDIT` → Payroll; `PAYROLL_BACKDATE` → Admin. Admin always passes. |
-| "Payroll run open" (§4.4) | A period that is not LOCKED and already has pay bills. An OPEN period with no bills does not block, because Lock & Roll always opens the next month. The change applies from the earliest SALARY period not yet locked. |
+| "Payroll run open" (§4.4) | A period that is APPROVED and not yet LOCKED (any payroll type). An OPEN or PROCESSED run does not block: its draft bills are recalculated at the next Prepare, and Approve refuses a run that would come out differently. The change applies from the earliest SALARY period not yet locked. |
 | "Used in a finalised payroll" (§5.2) | The rate's date range overlaps an APPROVED or LOCKED period. Replace this with the stored rate reference once pay lines record it. |
 | §4.2 mid-period changes | `resolveSegments` splits the month by transfer joining dates (PLACE) or approved promotion effect dates (DESIGNATION), as TNCU splits HRA/CCA into branch-day segments. Each segment uses the rate valid on the period end date. |
 | §11 Q1 | One basis drives both HRA and CCA. **Superseded by spec 06:** the method decides HRA only. |

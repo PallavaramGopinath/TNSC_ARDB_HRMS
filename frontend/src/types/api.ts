@@ -435,6 +435,8 @@ export interface HraCcaBasisStatus {
   effectiveFrom: string;
   canChange: boolean;
   blockedReason: string | null;
+  /** Unapproved runs with pay bills (e.g. "Nov 2026"): prepare them again after a change. */
+  reprepare: string[];
   rateCounts: Record<HraMethod, number>;
   lastChangedBy: string | null;
   lastChangedAt: string | null;
