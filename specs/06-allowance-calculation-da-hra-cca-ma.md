@@ -231,6 +231,7 @@ Example 4 has exactly 50 paise in DA, which rounds up.
 | D5 | The spec 01 basis switch | Becomes the **HRA method** (same setting key `payroll.hra_cca.basis`) with a third value `FIXED_AMOUNT`. It decides HRA only; CCA always goes by place |
 | D6 | Loss of pay (§10 Q2, Q3) | Full-month amounts only until confirmed; to be added with Preparation |
 | D7 | Transfer or promotion in the month (§10 Q4) | HRA, and the CCA amount, minimum and maximum, are split by days and rounded per part. Parts on the same terms are added before rounding |
+| D8 | Changing the HRA method while a run is prepared (26-Nov-2026) | Allowed until the run is approved. The prepared run keeps the old HRA until it is prepared again, and Approve refuses it until then. Blocked while a run is approved and not locked |
 
 | Item | As built |
 |---|---|
@@ -244,6 +245,6 @@ Example 4 has exactly 50 paise in DA, which rounds up.
 | Preview | Payroll › Processing › Allowance Preview; `GET /api/payroll/periods/:id/allowances` |
 | Code | Backend `services/payroll/allowanceRules.ts`, `hraCcaRateResolver.ts`, `hraAmountService.ts`, `allowancePreviewService.ts`; frontend `pages/payroll/HraAmounts.tsx`, `AllowancePreview.tsx` |
 
-**To start using it:** enter the DA rate and the HRA amounts (checked against the original settlement), then choose "Fixed amount by designation and place" in Administration › Rule Settings.
+**To start using it:** enter the DA rate and the HRA amounts (checked against the original settlement), then choose "Fixed amount by designation and place" in Administration › Rule Settings. If the month is already prepared, prepare it again (D8). `payroll_hra_cca_rates` needs no change for this method: its PLACE rows carry CCA only, and its DESIGNATION rows are not used.
 
 **Done with Payroll Preparation (spec 08):** ERROR issues block approval; the applied rows are stored on the pay line; loss of pay, part-month joiners and leavers, and assignments changed within the month (§10 Q2, Q3, Q6 and Q8 are answered in spec 08 §14). Increments within the month are still to do. PP and GP are entered on Payroll › Masters › Component Assignments; without an assignment they show as 0.

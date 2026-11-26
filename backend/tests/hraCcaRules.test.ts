@@ -63,14 +63,21 @@ describe('basisChangeWindow (spec §4.4, test 6)', () => {
     return { from_date: `2026-${mm}-01`, to_date: `2026-${mm}-${last}`, month, calendar_year: 2026, payroll_type: type, payroll_status: status, bill_count: bills };
   };
   it('applies from the open SALARY month when it has no bills yet', () =>
-    expect(basisChangeWindow([p(10, 'LOCKED', 40), p(11, 'OPEN', 0)], '2026-11-07')).toEqual({ canChange: true, blockedReason: null, effectiveFrom: '2026-11-01' }));
-  it('is blocked while a period has bills and is not locked', () => {
-    const w = basisChangeWindow([p(10, 'LOCKED', 40), p(11, 'PROCESSED', 40)], '2026-11-07');
+    expect(basisChangeWindow([p(10, 'LOCKED', 40), p(11, 'OPEN', 0)], '2026-11-07')).toEqual({ canChange: true, blockedReason: null, effectiveFrom: '2026-11-01', reprepare: [] }));
+  it('allows a change while the month is prepared but not approved, and asks to prepare it again', () =>
+    expect(basisChangeWindow([p(10, 'LOCKED', 40), p(11, 'PROCESSED', 40)], '2026-11-07')).toEqual({ canChange: true, blockedReason: null, effectiveFrom: '2026-11-01', reprepare: ['Nov 2026'] }));
+  it('allows a change after a rejected run (OPEN with draft bills)', () =>
+    expect(basisChangeWindow([p(10, 'LOCKED', 40), p(11, 'OPEN', 40)], '2026-11-07')).toMatchObject({ canChange: true, reprepare: ['Nov 2026'] }));
+  it('is blocked while a run is approved and not locked', () => {
+    const w = basisChangeWindow([p(10, 'LOCKED', 40), p(11, 'APPROVED', 40)], '2026-11-07');
     expect(w.canChange).toBe(false);
-    expect(w.blockedReason).toBe('Finalise or cancel the open payroll for Nov 2026 before changing the HRA method.');
+    expect(w.blockedReason).toBe('The Nov 2026 payroll run is approved. Lock it, or reverse the approval, before changing the HRA method.');
   });
-  it('is blocked by an approved but unlocked arrears run too', () =>
-    expect(basisChangeWindow([p(10, 'LOCKED', 40), p(11, 'OPEN', 0), p(9, 'APPROVED', 5, 'DA_ARREARS')], '2026-11-07').canChange).toBe(false));
+  it('is blocked by an approved but unlocked arrears run too', () => {
+    const w = basisChangeWindow([p(10, 'LOCKED', 40), p(11, 'OPEN', 0), p(9, 'APPROVED', 5, 'DA_ARREARS')], '2026-11-07');
+    expect(w.canChange).toBe(false);
+    expect(w.blockedReason).toBe('The Sep 2026 DA ARREARS run is approved. Lock it, or reverse the approval, before changing the HRA method.');
+  });
   it('applies from the day after the last locked month when nothing is open', () =>
     expect(basisChangeWindow([p(9, 'LOCKED', 40), p(10, 'LOCKED', 40)], '2026-11-07').effectiveFrom).toBe('2026-11-01'));
   it('applies from the current month on a fresh install', () =>

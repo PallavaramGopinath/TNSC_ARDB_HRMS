@@ -67,13 +67,26 @@ export const periodLabel = (p: { month: number; calendar_year: number }) => `${M
 
 /**
  * When can the HRA method change, and from which date (spec §4.4)?
- *  - Blocked while any period that is not LOCKED already has pay bills (an open, unfinalised payroll run).
- *    An OPEN period with no bills does not block: Lock & Roll always leaves the next month open.
+ *  - Blocked while any period is APPROVED but not yet LOCKED: its bills are final and must not be paid on
+ *    another method. Reverse the approval first.
+ *  - An OPEN or PROCESSED run does not block. Its draft bills keep the old HRA until it is prepared again;
+ *    Approve works the run out again and refuses a stale run, so the old HRA cannot be approved unseen.
+ *    `reprepare` names such a run, so the screen can say to prepare it again.
  *  - Takes effect from the earliest SALARY period not yet LOCKED; else the day after the last LOCKED
  *    SALARY period; else (nothing run yet) the first day of the business month.
  */
-export function basisChangeWindow(periods: PeriodState[], today: string): { canChange: boolean; blockedReason: string | null; effectiveFrom: string } {
-  const open = periods.filter((p) => p.payroll_status !== 'LOCKED' && p.bill_count > 0).sort((a, b) => (a.from_date < b.from_date ? -1 : 1));
+export interface ChangeWindow {
+  canChange: boolean;
+  blockedReason: string | null;
+  effectiveFrom: string;
+  /** Unapproved runs that already have pay bills (e.g. "Nov 2026"): prepare them again after a change. */
+  reprepare: string[];
+}
+
+export function basisChangeWindow(periods: PeriodState[], today: string): ChangeWindow {
+  const byFrom = (a: PeriodState, b: PeriodState) => (a.from_date < b.from_date ? -1 : 1);
+  const approved = periods.filter((p) => p.payroll_status === 'APPROVED').sort(byFrom);
+  const drafts = periods.filter((p) => (p.payroll_status === 'OPEN' || p.payroll_status === 'PROCESSED') && p.bill_count > 0).sort(byFrom);
   const salary = periods.filter((p) => p.payroll_type === 'SALARY');
   const pending = salary.filter((p) => p.payroll_status !== 'LOCKED').sort((a, b) => (a.from_date < b.from_date ? -1 : 1));
   const locked = salary.filter((p) => p.payroll_status === 'LOCKED').sort((a, b) => (a.to_date > b.to_date ? -1 : 1));
@@ -86,10 +99,13 @@ export function basisChangeWindow(periods: PeriodState[], today: string): { canC
     effectiveFrom = monthBounds(y, m).from;
   }
 
-  const blocker = open[0];
+  const blocker = approved[0];
   return {
     canChange: !blocker,
-    blockedReason: blocker ? `Finalise or cancel the open payroll for ${periodLabel(blocker)} before changing the HRA method.` : null,
+    blockedReason: blocker
+      ? `The ${periodLabel(blocker)} ${blocker.payroll_type === 'SALARY' ? 'payroll' : blocker.payroll_type.replace(/_/g, ' ')} run is approved. Lock it, or reverse the approval, before changing the HRA method.`
+      : null,
     effectiveFrom,
+    reprepare: drafts.map((p) => (p.payroll_type === 'SALARY' ? periodLabel(p) : `${periodLabel(p)} ${p.payroll_type.replace(/_/g, ' ')}`)),
   };
 }

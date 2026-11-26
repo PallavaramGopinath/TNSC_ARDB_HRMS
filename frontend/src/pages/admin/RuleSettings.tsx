@@ -44,13 +44,15 @@ function Gaps({ what, cover, to }: { what: string; cover: RateCoverage; to: stri
   );
 }
 
-/** HRA method (specs/01 §5.1, specs/06 §12). Change: Admin only; blocked while a payroll run is open. */
+/** HRA method (specs/01 §5.1, specs/06 §12). Change: Admin only; blocked while a payroll run is approved but not locked. */
 export function HraCcaBasisCard() {
   const qc = useQueryClient();
   const { user } = useAuth();
   const status = useQuery({ queryKey: ['hra-cca-basis'], queryFn: payrollApi.hraCcaBasis.status });
   const [choice, setChoice] = useState<HraMethod | null>(null);
   const [confirming, setConfirming] = useState(false);
+  /** Runs to prepare again after the last change made here. */
+  const [savedReprepare, setSavedReprepare] = useState<string[]>([]);
   useEffect(() => { if (status.data) setChoice(status.data.method); }, [status.data]);
 
   const s = status.data;
@@ -67,6 +69,7 @@ export function HraCcaBasisCard() {
     mutationFn: () => payrollApi.hraCcaBasis.change(choice!),
     onSuccess: () => {
       setConfirming(false);
+      setSavedReprepare(s?.reprepare ?? []);
       void qc.invalidateQueries({ queryKey: ['hra-cca-basis'] });
       void qc.invalidateQueries({ queryKey: ['hra-cca-rates'] });
       void qc.invalidateQueries({ queryKey: ['hra-cca-missing'] });
@@ -79,6 +82,12 @@ export function HraCcaBasisCard() {
         <p className="text-sm text-ink-400">Loading…</p>
       ) : (
         <>
+          {savedReprepare.length > 0 && (
+            <p role="status" className="mb-4 rounded-lg bg-warning-50 px-3 py-2 text-sm text-warning-700">
+              HRA method changed. Prepare the {savedReprepare.join(', ')} payroll again on{' '}
+              <Link to="/payroll/preparation" className="font-semibold underline">Payroll Preparation</Link> to apply it.
+            </p>
+          )}
           {!s.canChange && (
             <p role="status" className="mb-4 rounded-lg bg-warning-50 px-3 py-2 text-sm text-warning-700">{s.blockedReason}</p>
           )}
@@ -128,6 +137,11 @@ export function HraCcaBasisCard() {
             ) : coverage.data ? (
               <p className="rounded-lg bg-success-50 px-3 py-2 text-success-700">HRA and CCA are set for every active employee.</p>
             ) : null}
+            {s.reprepare.length > 0 && (
+              <p className="rounded-lg bg-warning-50 px-3 py-2 text-warning-700">
+                The {s.reprepare.join(', ')} payroll is already prepared with the current method. Prepare it again after this change: it cannot be approved until you do.
+              </p>
+            )}
             <p className="text-xs text-ink-500">HRA rates of the previous method will be kept but not used.</p>
             {save.isError && <p role="alert" className="rounded-lg bg-danger-50 px-3 py-2 text-danger-700">{errorMessage(save.error)}</p>}
           </div>
