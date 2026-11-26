@@ -1,5 +1,5 @@
 import { createColumnHelper } from '@tanstack/react-table';
-import { Download, Eye, Pencil } from 'lucide-react';
+import { Download, Eye, Pencil, Printer } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -41,11 +41,12 @@ interface Props {
   canEditDeductions: boolean;
   busy: boolean;
   onView: (b: PayBill) => void;
+  onPayslip: (b: PayBill) => void;
   onEdit: (b: PayBill) => void;
   onWithhold: (b: PayBill) => void;
 }
 
-export function PayrollGrid({ bills, loading, fileLabel, canWithhold, canEditDeductions, busy, onView, onEdit, onWithhold }: Props) {
+export function PayrollGrid({ bills, loading, fileLabel, canWithhold, canEditDeductions, busy, onView, onPayslip, onEdit, onWithhold }: Props) {
   const [filter, setFilter] = useState('');
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(20);
@@ -89,6 +90,7 @@ export function PayrollGrid({ bills, loading, fileLabel, canWithhold, canEditDed
         cell: ({ row: { original: b } }) => (
           <span className="flex gap-1">
             <Button variant="ghost" className="px-2 py-1" title="View pay bill" aria-label={`View ${b.employee_code}`} onClick={() => onView(b)}><Eye size={14} /></Button>
+            <Button variant="ghost" className="px-2 py-1" title="Payslip (individual pay bill)" aria-label={`Payslip of ${b.employee_code}`} onClick={() => onPayslip(b)}><Printer size={14} /></Button>
             {canEditDeductions && <Button variant="ghost" className="px-2 py-1" title="Edit deductions" aria-label={`Edit deductions of ${b.employee_code}`} disabled={busy} onClick={() => onEdit(b)}><Pencil size={14} /></Button>}
           </span>
         ),
