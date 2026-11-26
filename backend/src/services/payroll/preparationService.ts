@@ -23,6 +23,7 @@ import * as periods from './periodService';
 import { normaliseCode } from './payrollRules';
 import { computeRun, type RunItem, type RunPeriod } from './payrollRunService';
 import { buildPayBill } from './payBill';
+import { buildPayslip } from './payslip';
 import { payrollPrintOrder } from './printOrder';
 import { getSetting } from '../../lib/settings';
 import { sql } from 'kysely';
@@ -342,5 +343,90 @@ export async function payBill(actor: Actor, periodId: number, branchId?: number)
     generatedAt: new Date().toISOString(),
     generatedBy: actor.user?.fullName || actorName(actor),
     ...buildPayBill(rows, details),
+  };
+}
+
+// ---------------------------------------------------------------- payslips (spec 08 §4.7)
+/**
+ * Individual pay bills of a SALARY period: one employee, one branch, or all, in Pay Bill order.
+ * Each bill not yet approved or paid is a draft and printed with a DRAFT watermark.
+ */
+export async function payslips(actor: Actor, periodId: number, opts: { employeeId?: number; branchId?: number } = {}) {
+  const period = await periods.get(periodId);
+  if (period.payroll_type !== 'SALARY') throw AppError.badRequest('Payslips are for SALARY periods only');
+  let q = db
+    .selectFrom('payroll.payrolls as b')
+    .innerJoin('hr.employees as e', 'e.id', 'b.employee_id')
+    .innerJoin('hr.employee_designations as d', 'd.id', 'e.designation_id')
+    .innerJoin('core.branches as br', 'br.id', 'b.branch_id')
+    .leftJoin('hr.bank_masters as bk', 'bk.id', 'e.bank_master_id')
+    .select([
+      'b.id', 'b.employee_id', 'e.employee_code', 'e.employee_name', 'd.designation_name', 'e.grade', 'e.scale_of_pay', 'e.epf_number', 'e.pan_number',
+      'e.date_of_joining', 'e.date_of_retirement', 'bk.bank_name', 'e.account_number', 'e.ifsc_code', 'br.name as branch_name',
+      'b.working_days', 'b.service_days', 'b.payable_days', 'b.gross_earnings', 'b.total_deductions', 'b.net_salary',
+      'b.payroll_status', 'b.is_withheld', 'b.withhold_reason', 'b.approved_by', 'b.approved_at',
+    ])
+    .where('b.payroll_period_id', '=', periodId)
+    .orderBy(sql`case when br.type = 'HO' then 0 else 1 end`)
+    .orderBy('br.name')
+    .orderBy('b.branch_id')
+    .orderBy(payrollPrintOrder);
+  if (opts.employeeId) q = q.where('b.employee_id', '=', opts.employeeId);
+  if (opts.branchId) q = q.where('b.branch_id', '=', opts.branchId);
+  const rows = await q.execute();
+  if (rows.length === 0)
+    throw opts.employeeId ? AppError.notFound('This employee has no pay bill in this period') : AppError.conflict('There are no pay bills to print. Prepare the payroll first.');
+
+  const ids = rows.map((r) => r.id);
+  const employeeIds = rows.map((r) => r.employee_id);
+  const details = (
+    await Promise.all(chunks(ids).map((part) =>
+      db
+        .selectFrom('payroll.payroll_details as l')
+        .innerJoin('payroll.payroll_components as c', 'c.id', 'l.component_id')
+        .select(['l.payroll_id', 'c.component_code', 'c.component_name', 'c.component_type', 'c.display_order', 'l.allowance_amount', 'l.deduction_amount', 'l.applied'])
+        .where('l.payroll_id', 'in', part)
+        .orderBy('l.id')
+        .execute()))
+  ).flat();
+  const attendance = (
+    await Promise.all(chunks(employeeIds).map((part) =>
+      db
+        .selectFrom('payroll.payroll_period_attendances')
+        .select(['id', 'employee_id', 'total_working_days', 'head_quarters', 'camp', 'remarks'])
+        .where('payroll_period_id', '=', periodId)
+        .where('employee_id', 'in', part)
+        .execute()))
+  ).flat();
+  const leaves = attendance.length === 0 ? [] : (
+    await Promise.all(chunks(attendance.map((a) => a.id)).map((part) =>
+      db
+        .selectFrom('payroll.payroll_period_attendance_leaves as al')
+        .innerJoin('hr.employee_leave_types as t', 't.id', 'al.leave_type_id')
+        .select(['al.payroll_period_attendance_id', 't.leave_code', 't.leave_name', 'al.days', 't.pay_cut_factor', 't.cuts_special_pay_and_da'])
+        .where('al.payroll_period_attendance_id', 'in', part)
+        .orderBy('t.leave_name')
+        .execute()))
+  ).flat();
+
+  const linesOf = new Map<number, typeof details>();
+  for (const l of details) linesOf.set(l.payroll_id, [...(linesOf.get(l.payroll_id) ?? []), l]);
+  const attendanceOf = new Map(attendance.map((a) => [a.employee_id, {
+    workingDays: a.total_working_days,
+    hq: a.head_quarters,
+    camp: a.camp,
+    remarks: a.remarks,
+    leaves: leaves.filter((l) => l.payroll_period_attendance_id === a.id)
+      .map((l) => ({ code: l.leave_code?.trim() || l.leave_name, name: l.leave_name, days: l.days, factor: String(l.pay_cut_factor), cutsSpDa: l.cuts_special_pay_and_da })),
+  }]));
+
+  const organisation = await getSetting('core.organisation', ORGANISATION);
+  return {
+    organisation: { ...ORGANISATION, ...organisation },
+    period,
+    generatedAt: new Date().toISOString(),
+    generatedBy: actor.user?.fullName || actorName(actor),
+    preparedBy: period.processed_by,
+    slips: rows.map((r) => buildPayslip(r, linesOf.get(r.id) ?? [], attendanceOf.get(r.employee_id) ?? null)),
   };
 }

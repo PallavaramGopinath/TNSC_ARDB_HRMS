@@ -19,6 +19,7 @@ import type {
   RateCoverage,
   PayBillDetail,
   PayBillReport,
+  PayslipReport,
   PayrollComponent,
   PayrollPeriod,
   PayrollReadiness,
@@ -125,6 +126,8 @@ export const payrollApi = {
     bill: (id: number) => api.get<PayBillDetail>(`/payroll/payrolls/${id}`).then((r) => r.data),
     payBill: (periodId: number, branchId?: number) =>
       api.get<PayBillReport>(`/payroll/payrolls/preparation/${periodId}/pay-bill`, { params: branchId ? { branchId } : {} }).then((r) => r.data),
+    payslips: (periodId: number, opts: { employeeId?: number; branchId?: number } = {}) =>
+      api.get<PayslipReport>(`/payroll/payrolls/preparation/${periodId}/payslips`, { params: opts }).then((r) => r.data),
     readiness: (periodId: number) => api.get<PayrollReadiness>(`/payroll/readiness/${periodId}`).then((r) => r.data),
     prepare: (periodId: number, confirmAttendance: boolean) =>
       api.post<PrepareResult>('/payroll/payrolls/compute', { periodId, confirmAttendance }).then((r) => r.data),

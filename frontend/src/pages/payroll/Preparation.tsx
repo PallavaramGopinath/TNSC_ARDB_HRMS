@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Calculator, CheckCircle2, ClipboardList, FileText, Landmark, Lock, RefreshCw, RotateCcw, Undo2 } from 'lucide-react';
+import { AlertTriangle, Calculator, CheckCircle2, ClipboardList, FileText, Landmark, Printer, Lock, RefreshCw, RotateCcw, Undo2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { AgencyDialog } from '@/components/payroll/preparation/AgencyDialog';
 import { AttendanceDialog } from '@/components/payroll/preparation/AttendanceDialog';
@@ -15,6 +15,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Select } from '@/components/ui/Select';
 import { useAuth } from '@/hooks/useAuth';
 import { formatDate, formatINR, humanize, MONTHS } from '@/lib/format';
+import { openPayslips } from '@/lib/payslip';
 import { apiError, errorMessage } from '@/services/api';
 import { payrollApi } from '@/services/payroll';
 import type { PayBill, PayrollPeriod, PayrollRunGrid, PeriodStatus, PrepareResult } from '@/types/api';
@@ -45,6 +46,7 @@ export function PreparationPage() {
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [printing, setPrinting] = useState(false);
 
   const list = useQuery({ queryKey: LIST_KEY, queryFn: () => payrollApi.periods.list({ payrollType: 'SALARY' }) });
   const periods = useMemo(() => [...(list.data ?? [])].sort((a, b) => a.from_date.localeCompare(b.from_date) || a.id - b.id), [list.data]);
@@ -88,6 +90,11 @@ export function PreparationPage() {
   });
   const ask = (d: Dialog) => { for (const m of [approve, reject, reverse, withhold, prepare]) m.reset(); setDialog(d); };
 
+  const printSlips = (opts: { employeeId?: number; branchId?: number }) => {
+    setPrinting(true);
+    setError(null);
+    openPayslips(periodId, opts).catch(setError).finally(() => setPrinting(false));
+  };
   const busy = prepare.isPending || approve.isPending || reject.isPending || reverse.isPending || withhold.isPending;
   const bills = run.data?.bills ?? [];
   const view = bills.filter((b) => !branch || b.branch_id === Number(branch));
@@ -104,6 +111,7 @@ export function PreparationPage() {
         actions={
           <div className="flex gap-2">
             <Button variant="secondary" disabled={busy || bills.length === 0} title={bills.length === 0 ? 'Prepare the payroll first' : 'View, print or download the Pay Bill'} onClick={() => ask({ kind: 'payBill' })}><FileText size={14} /> Pay Bill</Button>
+            <Button variant="secondary" disabled={busy || printing || bills.length === 0} title={bills.length === 0 ? 'Prepare the payroll first' : `Individual pay bills, one per page${branch ? ' (this branch)' : ''}`} onClick={() => printSlips({ branchId: branch ? Number(branch) : undefined })}><Printer size={14} /> {printing ? 'Preparing…' : 'Payslips'}</Button>
             <Button variant="secondary" disabled={busy} onClick={refresh}><RefreshCw size={14} /> Refresh</Button>
           </div>
         }
@@ -156,6 +164,7 @@ export function PreparationPage() {
             key={periodId} bills={view} loading={run.isLoading} fileLabel={fileLabel} busy={busy}
             canWithhold={canEdit && p.payroll_status !== 'LOCKED'} canEditDeductions={canEdit && editable}
             onView={(bill) => ask({ kind: 'view', bill })} onEdit={(bill) => ask({ kind: 'edit', bill })}
+            onPayslip={(bill) => printSlips({ employeeId: bill.employee_id })}
             onWithhold={(bill) => (bill.is_withheld ? withhold.mutate({ bill, withheld: false }) : ask({ kind: 'withhold', bill }))}
           />
 

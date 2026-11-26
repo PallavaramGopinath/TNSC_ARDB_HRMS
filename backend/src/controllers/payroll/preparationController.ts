@@ -35,3 +35,8 @@ export const deductionsImport = async (req: Request, res: Response) => { res.jso
 
 export const manualGet = async (req: Request, res: Response) => { res.json(await manual.get(periodId(req), employeeId(req))); };
 export const manualSave = async (req: Request, res: Response) => { res.json(await manual.saveAndPrepare(actor(req), periodId(req), employeeId(req), req.body)); };
+export const payslips = async (req: Request, res: Response) => {
+  const employeeId = Number(req.query.employeeId) || undefined;
+  const branchId = Number(req.query.branchId) || undefined;
+  res.json(await svc.payslips(actor(req), periodId(req), { employeeId, branchId }));
+};

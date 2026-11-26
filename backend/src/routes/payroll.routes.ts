@@ -37,6 +37,7 @@ import {
   PeriodDeductionSaveSchema,
   PeriodEmployeeParamSchema,
   PayBillQuerySchema,
+  PayslipQuerySchema,
   PeriodParamSchema,
   PrepareSchema,
   ReturnSchema,
@@ -129,6 +130,7 @@ export function buildPayrollRouter(): Router {
   r.post('/payrolls/approve-run', write, validate(ApproveRunSchema), h(prep.approve));
   r.get('/payrolls/preparation/:periodId', read, validate(PeriodParamSchema, 'params'), h(prep.grid));
   r.get('/payrolls/preparation/:periodId/pay-bill', read, validate(PeriodParamSchema, 'params'), validate(PayBillQuerySchema, 'query'), h(prep.payBill));
+  r.get('/payrolls/preparation/:periodId/payslips', read, validate(PeriodParamSchema, 'params'), validate(PayslipQuerySchema, 'query'), h(prep.payslips));
   r.get('/payrolls/:id', read, validate(IdParamSchema, 'params'), h(prep.bill));
   r.put('/payrolls/:id/withhold', write, validate(IdParamSchema, 'params'), validate(WithholdSchema), h(prep.withhold));
 
