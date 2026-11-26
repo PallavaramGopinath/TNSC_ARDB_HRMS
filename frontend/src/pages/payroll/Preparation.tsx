@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Calculator, CheckCircle2, ClipboardList, Landmark, Lock, RefreshCw, RotateCcw, Undo2 } from 'lucide-react';
+import { AlertTriangle, Calculator, CheckCircle2, ClipboardList, FileText, Landmark, Lock, RefreshCw, RotateCcw, Undo2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { AgencyDialog } from '@/components/payroll/preparation/AgencyDialog';
 import { AttendanceDialog } from '@/components/payroll/preparation/AttendanceDialog';
 import { BillDialog } from '@/components/payroll/preparation/BillDialog';
 import { EditDeductionsDialog } from '@/components/payroll/preparation/EditDeductionsDialog';
+import { PayBillDialog } from '@/components/payroll/preparation/PayBillDialog';
 import { PayrollGrid } from '@/components/payroll/preparation/PayrollGrid';
 import { ReadinessPanel } from '@/components/payroll/preparation/ReadinessPanel';
 import { AskDialog, ErrorText } from '@/components/payroll/preparation/shared';
@@ -31,7 +32,7 @@ const label = (p: PayrollPeriod) => `${MONTHS[p.month - 1]} ${p.calendar_year}`;
 const LIST_KEY = ['payroll-periods', 'SALARY'];
 
 type Dialog =
-  | { kind: 'attendance' | 'agency' | 'approve' | 'reject' | 'reverse' | 'lock' }
+  | { kind: 'attendance' | 'agency' | 'approve' | 'reject' | 'reverse' | 'lock' | 'payBill' }
   | { kind: 'confirmAttendance'; message: string }
   | { kind: 'view' | 'edit' | 'withhold'; bill: PayBill };
 
@@ -100,7 +101,12 @@ export function PreparationPage() {
       <PageHeader
         title="Payroll Preparation"
         subtitle="Monthly salary of Head Office and all branches: prepare, review, approve"
-        actions={<Button variant="secondary" disabled={busy} onClick={refresh}><RefreshCw size={14} /> Refresh</Button>}
+        actions={
+          <div className="flex gap-2">
+            <Button variant="secondary" disabled={busy || bills.length === 0} title={bills.length === 0 ? 'Prepare the payroll first' : 'View, print or download the Pay Bill'} onClick={() => ask({ kind: 'payBill' })}><FileText size={14} /> Pay Bill</Button>
+            <Button variant="secondary" disabled={busy} onClick={refresh}><RefreshCw size={14} /> Refresh</Button>
+          </div>
+        }
       />
       {list.isError && <ErrorText>{errorMessage(list.error)}</ErrorText>}
       {resolve.isError && <ErrorText>{errorMessage(resolve.error)}</ErrorText>}
@@ -166,6 +172,7 @@ export function PreparationPage() {
           {dialog?.kind === 'withhold' && (
             <AskDialog title={`Withhold the salary of ${dialog.bill.employee_name}?`} message="The bill is prepared and approved with the rest, but left out of the bulk payment." action="Withhold" reason="optional" maxLength={256} busy={withhold.isPending} error={withhold.error} onYes={(reason) => withhold.mutate({ bill: dialog.bill, withheld: true, reason })} onClose={() => setDialog(null)} />
           )}
+          {dialog?.kind === 'payBill' && <PayBillDialog periodId={periodId} branchId={branch ? Number(branch) : undefined} onClose={() => setDialog(null)} />}
           {dialog?.kind === 'view' && <BillDialog billId={dialog.bill.id} onClose={() => setDialog(null)} />}
           {dialog?.kind === 'edit' && <EditDeductionsDialog periodId={periodId} employeeId={dialog.bill.employee_id} onClose={() => setDialog(null)} onSaved={prepared} />}
           {dialog?.kind === 'lock' && <LockDialog period={p} onClose={() => setDialog(null)} onDone={(next) => { setChosen(next.id); done(null); }} />}

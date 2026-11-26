@@ -22,7 +22,10 @@ import { isEditable, lockForInput, lockPeriod } from './periodLock';
 import * as periods from './periodService';
 import { normaliseCode } from './payrollRules';
 import { computeRun, type RunItem, type RunPeriod } from './payrollRunService';
+import { buildPayBill } from './payBill';
 import { payrollPrintOrder } from './printOrder';
+import { getSetting } from '../../lib/settings';
+import { sql } from 'kysely';
 
 const CHUNK = 500;
 const chunks = <T>(list: T[]): T[][] => Array.from({ length: Math.ceil(list.length / CHUNK) }, (_, n) => list.slice(n * CHUNK, (n + 1) * CHUNK));
@@ -305,4 +308,39 @@ export async function bill(id: number) {
     .orderBy('l.id')
     .execute();
   return { ...b, lines };
+}
+
+// ---------------------------------------------------------------- pay bill print (spec 08 §4.7)
+const ORGANISATION = { name: 'TNSC ARDB', short: 'TNSC ARDB', address: '' };
+
+/** The Pay Bill of a SALARY period, all branches or one: Head Office first, then branches by name, print order within. */
+export async function payBill(actor: Actor, periodId: number, branchId?: number) {
+  const period = await periods.get(periodId);
+  if (period.payroll_type !== 'SALARY') throw AppError.badRequest('The Pay Bill is for SALARY periods only');
+  let q = billRows()
+    .where('b.payroll_period_id', '=', periodId)
+    .orderBy(sql`case when br.type = 'HO' then 0 else 1 end`)
+    .orderBy('br.name')
+    .orderBy('b.branch_id')
+    .orderBy(payrollPrintOrder);
+  if (branchId) q = q.where('b.branch_id', '=', branchId);
+  let lines = db
+    .selectFrom('payroll.payroll_details as l')
+    .innerJoin('payroll.payrolls as b', 'b.id', 'l.payroll_id')
+    .innerJoin('payroll.payroll_components as c', 'c.id', 'l.component_id')
+    .select(['l.payroll_id', 'c.component_code', 'c.component_name', 'c.component_type', 'c.display_order', 'l.allowance_amount', 'l.deduction_amount'])
+    .where('b.payroll_period_id', '=', periodId);
+  if (branchId) lines = lines.where('b.branch_id', '=', branchId);
+  const [rows, details, organisation] = await Promise.all([q.execute(), lines.execute(), getSetting('core.organisation', ORGANISATION)]);
+  if (rows.length === 0) throw AppError.conflict('There are no pay bills to print. Prepare the payroll first.');
+
+  return {
+    organisation: { ...ORGANISATION, ...organisation },
+    period,
+    branch: branchId ? { id: branchId, name: rows[0]!.branch_name } : null,
+    forApproval: period.payroll_status === 'OPEN' || period.payroll_status === 'PROCESSED',
+    generatedAt: new Date().toISOString(),
+    generatedBy: actor.user?.fullName || actorName(actor),
+    ...buildPayBill(rows, details),
+  };
 }

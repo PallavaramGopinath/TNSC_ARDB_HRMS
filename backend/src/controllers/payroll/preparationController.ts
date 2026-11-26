@@ -18,6 +18,10 @@ export const reject = async (req: Request, res: Response) => { res.json(await sv
 export const reverse = async (req: Request, res: Response) => { res.json(await svc.reverse(actor(req), id(req), req.body.reason)); };
 export const withhold = async (req: Request, res: Response) => { res.json(await svc.withhold(actor(req), id(req), req.body)); };
 export const grid = async (req: Request, res: Response) => { res.json(await svc.grid(periodId(req))); };
+export const payBill = async (req: Request, res: Response) => {
+  const branchId = Number(req.query.branchId) || undefined;
+  res.json(await svc.payBill(actor(req), periodId(req), branchId));
+};
 export const bill = async (req: Request, res: Response) => { res.json(await svc.bill(id(req))); };
 export const readiness = async (req: Request, res: Response) => { res.json(await readinessOf(periodId(req))); };
 
