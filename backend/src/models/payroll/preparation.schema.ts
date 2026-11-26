@@ -10,6 +10,8 @@ const money = z.number().min(0, 'Cannot be negative').max(99_999_999.99, 'Too la
 const cell = z.string().max(200);
 
 export const PeriodParamSchema = z.object({ periodId: id });
+/** Pay Bill print: one branch, or all when omitted. */
+export const PayBillQuerySchema = z.object({ branchId: id.optional() });
 export const PeriodEmployeeParamSchema = z.object({ periodId: id, employeeId: id });
 
 export const PrepareSchema = z.object({ periodId: id, confirmAttendance: flag });

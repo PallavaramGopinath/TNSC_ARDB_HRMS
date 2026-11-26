@@ -307,6 +307,42 @@ export interface PayrollRunGrid {
   changed: Array<{ employeeId: number; employeeCode: string; employeeName: string }>;
   summary: Record<'paid' | 'pending' | 'withheld', { count: number; net: string }>;
 }
+/** Pay Bill print (specs/08 §4.7): amounts keyed by column key, plus gross, deductions and net. */
+export interface PayBillColumnDef { key: string; label: string; name: string; side: 'EARNING' | 'DEDUCTION' }
+export interface PayBillReportRow {
+  serial: number;
+  payrollId: number;
+  employeeCode: string;
+  employeeName: string;
+  designation: string;
+  payDays: string;
+  lop: string;
+  withheld: boolean;
+  withholdReason: string | null;
+  amounts: Record<string, string>;
+}
+export interface PayBillReport {
+  organisation: { name: string; short: string; address: string };
+  period: PayrollPeriod;
+  branch: { id: number; name: string } | null;
+  forApproval: boolean;
+  generatedAt: string;
+  generatedBy: string;
+  columns: PayBillColumnDef[];
+  branches: Array<{ branchId: number; branchName: string; count: number; rows: PayBillReportRow[]; totals: Record<string, string> }>;
+  totals: Record<string, string>;
+  abstract: {
+    earnings: Array<{ label: string; name: string; amount: string }>;
+    deductions: Array<{ label: string; name: string; amount: string }>;
+    gross: string;
+    deductionsTotal: string;
+    net: string;
+    netInWords: string;
+    employees: number;
+    byBranch: Array<{ branchName: string; count: number; net: string }>;
+    withheld: { count: number; net: string };
+  };
+}
 export interface PrepareResult { bills: number; lines: number; errors: number; warnings: number }
 
 export interface PayrollReadiness {
